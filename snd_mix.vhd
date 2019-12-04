@@ -24,8 +24,6 @@ architecture rtl of SND_MIX is
 	signal TEMP_CH0_L	: signed(15 downto 0);
 	signal TEMP_CH1_R	: signed(15 downto 0);
 	signal TEMP_CH1_L	: signed(15 downto 0);
-	signal SUM_R		: signed(16 downto 0);
-	signal SUM_L		: signed(16 downto 0);
 
 begin
 
@@ -34,7 +32,7 @@ begin
 	TEMP_CH1_R <= CH1_R when CH1_EN = '1' else (others => '0');
 	TEMP_CH1_L <= CH1_L when CH1_EN = '1' else (others => '0');
 	
-	OUT_R <= resize(shift_right(TEMP_CH0_R + TEMP_CH1_R, 1), OUT_R'length);
-	OUT_L <= resize(shift_right(TEMP_CH0_L + TEMP_CH1_L, 1), OUT_L'length);
+	OUT_R <= shift_right(TEMP_CH0_R, 1) + shift_right(TEMP_CH1_R, 1);
+	OUT_L <= shift_right(TEMP_CH0_L, 1) + shift_right(TEMP_CH1_L, 1);
 
 end rtl;
