@@ -99,8 +99,8 @@ begin
 			if EN = '1' and SAMPLE_CE = '1' then	-- ~44.1kHz
 				if EMPTY = '0' then
 					RD_REQ <= '1';
-					OUTL <= signed(FIFO_Q(31 downto 16));
-					OUTR <= signed(FIFO_Q(15 downto 0));
+					OUTL <= signed(FIFO_Q(15 downto 0));
+					OUTR <= signed(FIFO_Q(31 downto 16));
 				else
 					OUTL <= (others => '0');
 					OUTR <= (others => '0');
