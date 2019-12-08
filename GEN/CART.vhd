@@ -10,7 +10,7 @@ entity CART is
 		ENABLE		: in std_logic;
 		
 		ROM_MODE		: in std_logic := '0';
-		RAM_ID		: in std_logic_vector(2 downto 0);
+		RAM_ID		: in std_logic_vector(7 downto 0);
 		
 		VA   			: in std_logic_vector(23 downto 1);
 		VDI			: in std_logic_vector(15 downto 0);
@@ -118,7 +118,7 @@ begin
 					if CART_RAM_SEL = '1' and CART_RAM_DTACK_N = '1' then
 						if VA(21) = '0' and RNW = '1' then						--RAM CART ID
 							CART_RAM_DTACK_N <= '0';
-							CART_RAM_DO <= x"FF0" & "0" & RAM_ID;
+							CART_RAM_DO <= x"FF" & RAM_ID;
 							RAMS <= MS_END;
 						elsif VA(21 downto 20) = "10" and LDS_N = '0' then	--RAM CART memory
 							RAM_CE_N <= '0';

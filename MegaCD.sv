@@ -127,7 +127,7 @@ module emu
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
-assign BUTTONS   = 0;
+assign BUTTONS   = {bk_reload, 1'b0};
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -197,10 +197,10 @@ localparam CONF_STR = {
 //	"C,Cheats;",
 //	"H1OO,Cheats Enabled,Yes,No;",
 //	"-;",
-//	"D0RG,Load Backup RAM;",
-//	"D0RH,Save Backup RAM;",
-//	"D0OD,Autosave,No,Yes;",
-//	"-;",
+	"D0RG,Reload Backup RAM;",
+	"D0RH,Save Backup RAM;",
+	"D0OD,Autosave,No,Yes;",
+	"-;",
 	"OA,Aspect Ratio,4:3,16:9;",
 	"OU,320x224 Aspect,Original,Corrected;",
 	"o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -217,6 +217,8 @@ localparam CONF_STR = {
 	"OLM,Multitap,Disabled,4-Way,TeamPlayer,J-Cart;",
 	"OIJ,Mouse,None,Port1,Port2;",
 	"OK,Mouse Flip Y,No,Yes;",
+	"-;",
+	"O3,RAM Cart,Off,512KB;",
 	"-;",
 	"H2OB,Enable FM,Yes,No;",//11
 	"H2OC,Enable PSG,Yes,No;",//12
@@ -333,10 +335,11 @@ wire bios_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
 wire cdc_dat_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 wire cdc_sub_download = ioctl_download & (ioctl_index[5:0] == 6'h03);
 wire cart_download = ioctl_download & (ioctl_index[5:0] == 6'h04);
+wire save_download = ioctl_download & (ioctl_index[5:0] == 6'h05);
 
 wire rom_download = bios_download | cart_download;
 
-wire reset = RESET | status[0] | buttons[1] | region_set | bk_loading;
+wire reset = RESET | status[0] | buttons[1] | region_set;
 
 //Genesis
 wire [23:1] GEN_VA;
@@ -579,7 +582,7 @@ CART CART
 	.ENABLE(1),
 	
 	.ROM_MODE(rom_cart_mode),
-	.RAM_ID(6),					//backup ram size = (1<<n)*8192, n=0..6, when n=7 ram is not present
+	.RAM_ID(status[3] ? 8'd6 : 8'd255),	//backup ram size = (1<<n)*8192, n=0..6, when n=255 ram is not present
 
 	.VA(GEN_VA),
 	.VDI(GEN_VDO),
@@ -623,7 +626,7 @@ sdram sdram
 	.addr1(rom_download ? {1'b0,ioctl_addr[21:1]} : 									//ROM 000000-3FFFFF
 			 !GEN_RAM_CE_N ? {7'b1000000,GEN_VA[15:1]} : 								//WORK RAM 400000-40FFFF
 			 !CART_RAM_CE_N ? {3'b110,GEN_VA[19:1]} : 									//CART RAM 600000-6FFFFF
-			 !CART_ROM_CE_N ? {1'b0,GEN_VA[21:1] & {rom_mask[21:13],12'h1FFF}} :	//CART ROM 000000-3FFFFF
+			 !CART_ROM_CE_N ? {1'b0,GEN_VA[21:1] & {rom_mask[21:13],12'hFFF}} :	//CART ROM 000000-3FFFFF
 			 {6'b000000,GEN_VA[16:1]} ),														//BIOS ROM 000000-01FFFF
 	.bank1(2'd1),
 	.din1(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : GEN_VDO),
@@ -653,7 +656,7 @@ dpram_dif #(13,8,12,16,"bram.mif") bram
 	.wren_a(MCD_BRAM_WE),
 	.q_a(MCD_BRAM_DI),
 
-	.address_b({sd_lba[4:0],sd_buff_addr}),
+	.address_b({sd_lba[3:0],sd_buff_addr}),
 	.data_b(sd_buff_dout),
 	.wren_b(sd_buff_wr & sd_ack),
 	.q_b(sd_buff_din)
@@ -913,12 +916,15 @@ end
 
 /////////////////////////  BRAM SAVE/LOAD  /////////////////////////////
 
-wire downloading = rom_download;
+localparam BK_LAST_LBA = 'hF;
+wire downloading = save_download;
+wire bk_change  = MCD_BRAM_WE;
+wire autosave   = status[13];
+wire bk_load    = status[16];
+wire bk_save    = status[17];
 
 reg bk_ena = 0;
 reg sav_pending = 0;
-wire bk_change = 0;
-
 always @(posedge clk_sys) begin
 	reg old_downloading = 0;
 	reg old_change = 0;
@@ -930,36 +936,38 @@ always @(posedge clk_sys) begin
 	if(downloading && img_mounted && !img_readonly) bk_ena <= 1;
 
 	old_change <= bk_change;
-	if (~old_change & bk_change & ~OSD_STATUS) sav_pending <= status[13];
+	if (~old_change & bk_change) sav_pending <= 1;
 	else if (bk_state) sav_pending <= 0;
 end
 
-wire bk_load    = status[16];
-wire bk_save    = status[17] | (sav_pending & OSD_STATUS);
+wire bk_save_a  = autosave & OSD_STATUS;
 reg  bk_loading = 0;
 reg  bk_state   = 0;
+reg  bk_reload  = 0;
 
 always @(posedge clk_sys) begin
 	reg old_downloading = 0;
-	reg old_load = 0, old_save = 0, old_ack;
+	reg old_load = 0, old_save = 0, old_save_a = 0, old_ack;
 
 	old_downloading <= downloading;
 
-	old_load <= bk_load;
-	old_save <= bk_save;
-	old_ack  <= sd_ack;
+	old_load   <= bk_load;
+	old_save   <= bk_save;
+	old_save_a <= bk_save_a;
+	old_ack    <= sd_ack;
 
 	if(~old_ack & sd_ack) {sd_rd, sd_wr} <= 0;
 
 	if(!bk_state) begin
-		if(bk_ena & ((~old_load & bk_load) | (~old_save & bk_save))) begin
+		if(bk_ena & ((~old_load & bk_load) | (~old_save & bk_save) | (~old_save_a & bk_save_a & sav_pending))) begin
 			bk_state <= 1;
 			bk_loading <= bk_load;
+			bk_reload <= bk_load;
 			sd_lba <= 0;
 			sd_rd <=  bk_load;
 			sd_wr <= ~bk_load;
 		end
-		if(old_downloading & ~rom_download & |img_size & bk_ena) begin
+		if(old_downloading & ~rom_download & bk_ena) begin
 			bk_state <= 1;
 			bk_loading <= 1;
 			sd_lba <= 0;
@@ -968,7 +976,8 @@ always @(posedge clk_sys) begin
 		end
 	end else begin
 		if(old_ack & ~sd_ack) begin
-			if(&sd_lba[6:0]) begin
+			if(sd_lba == BK_LAST_LBA) begin
+				bk_reload <= 0;
 				bk_loading <= 0;
 				bk_state <= 0;
 			end else begin
