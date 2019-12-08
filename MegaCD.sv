@@ -197,7 +197,7 @@ localparam CONF_STR = {
 //	"C,Cheats;",
 //	"H1OO,Cheats Enabled,Yes,No;",
 //	"-;",
-	"O3,Backup RAM,Internal,Int+Cart;",
+	"O3,Backup RAM,Internal,Internal+Cart;",
 	"D0RG,Reload Backup RAM;",
 	"D0RH,Save Backup RAM;",
 	"D0OD,Autosave,No,Yes;",
