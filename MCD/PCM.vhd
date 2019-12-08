@@ -58,12 +58,11 @@ architecture rtl of PCM is
 	signal CHOFF 		: std_logic_vector(7 downto 0);
 	
 	signal EN 			: std_logic;
---	signal RUN 			: std_logic;
 	signal CLK_CNT		: unsigned(5 downto 0);
 	signal SAMPLE_CE 	: std_logic;
+	signal STEP 		: std_logic;
 	signal WRA 			: reg8x27_t;
 	signal CH 			: unsigned(2 downto 0);
---	signal LP 			: std_logic_vector(7 downto 0);
 	signal LSUM, RSUM : unsigned(16 downto 0);
 	signal LOUT, ROUT : signed(15 downto 0);
 	
@@ -200,7 +199,7 @@ begin
 		CLK   		=> CLK,
 		RST_N       => RST_N,		
 		IN_CLK   	=> 53690000,
-		OUT_CLK   	=> 260416,				--12500000/384=32552*8=260416
+		OUT_CLK   	=> 520832,				--12500000/384=32552*8*2=520832
 		CE   			=> SAMPLE_CE
 	);
 	
@@ -213,56 +212,55 @@ begin
 		if RST_N = '0' then
 			CH <= (others => '0');
 			WRA <= (others => (others => '0'));
---			LP <= (others => '0');
 			LOUT <= (others => '0');
 			ROUT <= (others => '0');
 			LSUM <= (others => '0');
 			RSUM <= (others => '0');
---			RUN <= '0';
+			STEP <= '0';
 		elsif rising_edge(CLK) then
 			RAM_DI <= RAM_DI_B;
 			if ENABLE = '1' and SAMPLE_CE = '1' then
-				CH <= CH + 1;
---				if CH = 7 then
---					RUN <= ONOFF;
---				end if;
-				
-				if CHOFF(to_integer(CH)) = '0' and ONOFF = '1' and RAM_DI /= x"FF" then
-					WD := unsigned(RAM_DI);
+				STEP <= not STEP;
+				if STEP = '0' then
+					if CHOFF(to_integer(CH)) = '1' or ONOFF = '0' then
+						WRA(to_integer(CH)) <= ST(to_integer(CH)) & "0000000000000000000";
+					elsif RAM_DI = x"FF" then
+						WRA(to_integer(CH)) <= LS(to_integer(CH)) & "00000000000";
+					end if;
 				else
-					WD := (others => '0');
-				end if;
-				
-				MUL16 := resize( WD(6 downto 0) * unsigned(ENV(to_integer(CH))), MUL16'length );
-				MUL19L := resize( MUL16 * unsigned(PAN(to_integer(CH))(3 downto 0)), MUL19L'length );
-				MUL19R := resize( MUL16 * unsigned(PAN(to_integer(CH))(7 downto 4)), MUL19R'length );
-				
-				if WD(7) = '1' then
-					SUM17L := resize( LSUM + MUL19L(18 downto 5), SUM17L'length );
-					SUM17R := resize( RSUM + MUL19R(18 downto 5), SUM17R'length );
-				else
-					SUM17L := resize( LSUM - MUL19L(18 downto 5), SUM17L'length );
-					SUM17R := resize( RSUM - MUL19R(18 downto 5), SUM17R'length );
-				end if;
-				
-				if CH = 7 then
-					LOUT <= signed( CLAMP16(SUM17L) );
-					ROUT <= signed( CLAMP16(SUM17R) );
-					LSUM <= (others => '0');
-					RSUM <= (others => '0');
-				else
-					LSUM <= SUM17L;
-					RSUM <= SUM17R;
-				end if;
-				
-				if CHOFF(to_integer(CH)) = '1' or ONOFF = '0' then
-					WRA(to_integer(CH)) <= ST(to_integer(CH)) & "0000000000000000000";
---					LP(to_integer(CH)) <= '0';
-				elsif RAM_DI = x"FF" then
-					WRA(to_integer(CH)) <= LS(to_integer(CH)) & "00000000000";
---					LP(to_integer(CH)) <= '1';
-				else
-					WRA(to_integer(CH)) <= std_logic_vector( unsigned(WRA(to_integer(CH))) + unsigned(FD(to_integer(CH))) );
+					CH <= CH + 1;
+					
+					if CHOFF(to_integer(CH)) = '0' and ONOFF = '1' then
+						WD := unsigned(RAM_DI);
+					else
+						WD := (others => '0');
+					end if;
+					
+					MUL16 := resize( WD(6 downto 0) * unsigned(ENV(to_integer(CH))), MUL16'length );
+					MUL19L := resize( MUL16 * unsigned(PAN(to_integer(CH))(3 downto 0)), MUL19L'length );
+					MUL19R := resize( MUL16 * unsigned(PAN(to_integer(CH))(7 downto 4)), MUL19R'length );
+					
+					if WD(7) = '1' then
+						SUM17L := resize( LSUM + MUL19L(18 downto 5), SUM17L'length );
+						SUM17R := resize( RSUM + MUL19R(18 downto 5), SUM17R'length );
+					else
+						SUM17L := resize( LSUM - MUL19L(18 downto 5), SUM17L'length );
+						SUM17R := resize( RSUM - MUL19R(18 downto 5), SUM17R'length );
+					end if;
+					
+					if CH = 7 then
+						LOUT <= signed( CLAMP16(SUM17L) );
+						ROUT <= signed( CLAMP16(SUM17R) );
+						LSUM <= (others => '0');
+						RSUM <= (others => '0');
+					else
+						LSUM <= SUM17L;
+						RSUM <= SUM17R;
+					end if;
+					
+					if CHOFF(to_integer(CH)) = '0' and ONOFF = '1' then
+						WRA(to_integer(CH)) <= std_logic_vector( unsigned(WRA(to_integer(CH))) + unsigned(FD(to_integer(CH))) );
+					end if;
 				end if;
 			end if;
 		end if;
