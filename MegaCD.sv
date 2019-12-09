@@ -127,7 +127,7 @@ module emu
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
-assign BUTTONS   = 0;
+assign BUTTONS   = {bk_reload, 1'b0};
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -197,10 +197,11 @@ localparam CONF_STR = {
 //	"C,Cheats;",
 //	"H1OO,Cheats Enabled,Yes,No;",
 //	"-;",
-//	"D0RG,Load Backup RAM;",
-//	"D0RH,Save Backup RAM;",
-//	"D0OD,Autosave,No,Yes;",
-//	"-;",
+	"O3,Backup RAM,Internal,Internal+Cart;",
+	"D0RG,Reload Backup RAM;",
+	"D0RH,Save Backup RAM;",
+	"D0OD,Autosave,No,Yes;",
+	"-;",
 	"OA,Aspect Ratio,4:3,16:9;",
 	"OU,320x224 Aspect,Original,Corrected;",
 	"o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -249,7 +250,7 @@ reg         sd_wr = 0;
 wire        sd_ack;
 wire  [7:0] sd_buff_addr;
 wire [15:0] sd_buff_dout;
-wire [15:0] sd_buff_din;
+wire [15:0] sd_buff_din = sd_lba[10:4] ? tmpram_sd_buff_data : bram_sd_buff_data;
 wire        sd_buff_wr;
 wire        img_mounted;
 wire        img_readonly;
@@ -333,10 +334,11 @@ wire bios_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
 wire cdc_dat_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 wire cdc_sub_download = ioctl_download & (ioctl_index[5:0] == 6'h03);
 wire cart_download = ioctl_download & (ioctl_index[5:0] == 6'h04);
+wire save_download = ioctl_download & (ioctl_index[5:0] == 6'h05);
 
 wire rom_download = bios_download | cart_download;
 
-wire reset = RESET | status[0] | buttons[1] | region_set | bk_loading;
+wire reset = RESET | status[0] | buttons[1] | region_set;
 
 //Genesis
 wire [23:1] GEN_VA;
@@ -572,6 +574,8 @@ wire        CART_RAM_CE_N;
 wire [15:0] CART_ROM_DO;
 wire        CART_ROM_BUSY;
 
+wire        CART_EN = status[3];
+
 CART CART
 (
 	.RST_N(~reset),
@@ -579,7 +583,7 @@ CART CART
 	.ENABLE(1),
 	
 	.ROM_MODE(rom_cart_mode),
-	.RAM_ID(6),					//backup ram size = (1<<n)*8192, n=0..6, when n=7 ram is not present
+	.RAM_ID(CART_EN ? 8'd6 : 8'd255),	//backup ram size = (1<<n)*8192, n=0..6, when n=255 ram is not present
 
 	.VA(GEN_VA),
 	.VDI(GEN_VDO),
@@ -623,7 +627,7 @@ sdram sdram
 	.addr1(rom_download ? {1'b0,ioctl_addr[21:1]} : 									//ROM 000000-3FFFFF
 			 !GEN_RAM_CE_N ? {7'b1000000,GEN_VA[15:1]} : 								//WORK RAM 400000-40FFFF
 			 !CART_RAM_CE_N ? {3'b110,GEN_VA[19:1]} : 									//CART RAM 600000-6FFFFF
-			 !CART_ROM_CE_N ? {1'b0,GEN_VA[21:1] & {rom_mask[21:13],12'h1FFF}} :	//CART ROM 000000-3FFFFF
+			 !CART_ROM_CE_N ? {1'b0,GEN_VA[21:1] & {rom_mask[21:13],12'hFFF}} :	//CART ROM 000000-3FFFFF
 			 {6'b000000,GEN_VA[16:1]} ),														//BIOS ROM 000000-01FFFF
 	.bank1(2'd1),
 	.din1(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : GEN_VDO),
@@ -634,18 +638,19 @@ sdram sdram
 	.rfs1(GEN_RFS & rom_cart_mode),
 	.busy1(GEN_MEM_BUSY),
 	
-	.addr2(0),//CART RAM 600000-6FFFFF for sd_*
+	.addr2({3'b110,tmpram_lba[9:0],tmpram_addr}), //CART RAM 600000-6FFFFF for sd_*
 	.bank2(2'd1),
-	.din2(0),
-	.dout2(),
-	.rd2(0),
-	.wrl2(0),
-	.wrh2(0),
+	.din2({tmpram_dout,tmpram_dout}),
+	.dout2(tmpram_din),
+	.rd2(tmpram_req & ~bk_loading),
+	.wrl2(tmpram_req & bk_loading),
+	.wrh2(tmpram_req & bk_loading),
 	.rfs2(0),
-	.busy2()
+	.busy2(tmpram_busy)
 );
 
-dpram_dif #(13,8,12,16,"bram.mif") bram
+wire [15:0] bram_sd_buff_data;
+dpram_dif #(13,8,12,16) bram
 (
 	.clock(clk_sys),
 	.address_a(MCD_BRAM_ADDR),
@@ -653,11 +658,59 @@ dpram_dif #(13,8,12,16,"bram.mif") bram
 	.wren_a(MCD_BRAM_WE),
 	.q_a(MCD_BRAM_DI),
 
-	.address_b({sd_lba[4:0],sd_buff_addr}),
+	.address_b({sd_lba[3:0],sd_buff_addr}),
 	.data_b(sd_buff_dout),
-	.wren_b(sd_buff_wr & sd_ack),
-	.q_b(sd_buff_din)
+	.wren_b(sd_buff_wr & sd_ack & !sd_lba[10:4]),
+	.q_b(bram_sd_buff_data)
 );
+
+wire [7:0] tmpram_dout;
+wire [7:0] tmpram_din;
+wire       tmpram_busy;
+
+wire [15:0] tmpram_sd_buff_data;
+dpram_dif #(9,8,8,16) tmpram
+(
+	.clock(clk_sys),
+
+	.address_a(tmpram_addr),
+	.wren_a(~bk_loading & tmpram_busy_d & ~tmpram_busy),
+	.data_a(tmpram_din),
+	.q_a(tmpram_dout),
+
+	.address_b(sd_buff_addr),
+	.wren_b(sd_buff_wr & sd_ack & |sd_lba[10:4]),
+	.data_b(sd_buff_dout),
+	.q_b(tmpram_sd_buff_data)
+);
+
+reg [10:0] tmpram_lba;
+reg  [8:0] tmpram_addr;
+reg tmpram_tx_start;
+reg tmpram_tx_finish;
+reg tmpram_req;
+reg tmpram_busy_d;
+always @(posedge clk_sys) begin
+	reg state;
+
+	tmpram_lba <= sd_lba[10:0]-11'h10;
+	
+	tmpram_busy_d <= tmpram_busy;
+	if(~tmpram_busy_d & tmpram_busy) tmpram_req <= 0;
+
+	if(~tmpram_tx_start) {tmpram_addr, state, tmpram_tx_finish} <= 0;
+	else if(~tmpram_tx_finish) begin
+		if(!state) begin
+			tmpram_req <= 1;
+			state <= 1;
+		end
+		else if(tmpram_busy_d & ~tmpram_busy) begin
+			state <= 0;
+			if(~&tmpram_addr) tmpram_addr <= tmpram_addr + 1'd1;
+			else tmpram_tx_finish <= 1;
+		end
+	end
+end
 
 //DDR3
 //wire [24:1] rom_addr;
@@ -913,12 +966,14 @@ end
 
 /////////////////////////  BRAM SAVE/LOAD  /////////////////////////////
 
-wire downloading = rom_download;
+wire downloading = save_download;
+wire bk_change  = MCD_BRAM_WE | (CART_EN & ~CART_RAM_CE_N & (~GEN_WRL_N | ~GEN_WRH_N));
+wire autosave   = status[13];
+wire bk_load    = status[16];
+wire bk_save    = status[17];
 
 reg bk_ena = 0;
 reg sav_pending = 0;
-wire bk_change = 0;
-
 always @(posedge clk_sys) begin
 	reg old_downloading = 0;
 	reg old_change = 0;
@@ -930,53 +985,95 @@ always @(posedge clk_sys) begin
 	if(downloading && img_mounted && !img_readonly) bk_ena <= 1;
 
 	old_change <= bk_change;
-	if (~old_change & bk_change & ~OSD_STATUS) sav_pending <= status[13];
+	if (~old_change & bk_change) sav_pending <= 1;
 	else if (bk_state) sav_pending <= 0;
 end
 
-wire bk_load    = status[16];
-wire bk_save    = status[17] | (sav_pending & OSD_STATUS);
+wire bk_save_a  = autosave & OSD_STATUS;
 reg  bk_loading = 0;
 reg  bk_state   = 0;
+reg  bk_reload  = 0;
 
 always @(posedge clk_sys) begin
 	reg old_downloading = 0;
-	reg old_load = 0, old_save = 0, old_ack;
+	reg old_load = 0, old_save = 0, old_save_a = 0, old_ack;
+	reg [1:0] state;
 
 	old_downloading <= downloading;
 
-	old_load <= bk_load;
-	old_save <= bk_save;
-	old_ack  <= sd_ack;
+	old_load   <= bk_load;
+	old_save   <= bk_save;
+	old_save_a <= bk_save_a;
+	old_ack    <= sd_ack;
 
 	if(~old_ack & sd_ack) {sd_rd, sd_wr} <= 0;
 
 	if(!bk_state) begin
-		if(bk_ena & ((~old_load & bk_load) | (~old_save & bk_save))) begin
+		tmpram_tx_start <= 0;
+		state <= 0;
+		sd_lba <= 0;
+		bk_reload <= 0;
+		bk_loading <= 0;
+		if(bk_ena & ((~old_load & bk_load) | (~old_save & bk_save) | (~old_save_a & bk_save_a & sav_pending))) begin
 			bk_state <= 1;
 			bk_loading <= bk_load;
-			sd_lba <= 0;
+			bk_reload <= bk_load;
 			sd_rd <=  bk_load;
 			sd_wr <= ~bk_load;
 		end
-		if(old_downloading & ~rom_download & |img_size & bk_ena) begin
+		if(old_downloading & ~rom_download & bk_ena) begin
 			bk_state <= 1;
 			bk_loading <= 1;
-			sd_lba <= 0;
 			sd_rd <= 1;
 			sd_wr <= 0;
 		end
-	end else begin
+	end
+	else if(!sd_lba[10:4]) begin
 		if(old_ack & ~sd_ack) begin
-			if(&sd_lba[6:0]) begin
-				bk_loading <= 0;
-				bk_state <= 0;
+			sd_lba <= sd_lba + 1'd1;
+			if(&sd_lba[3:0]) begin
+				if(~CART_EN) bk_state <= 0;
 			end else begin
-				sd_lba <= sd_lba + 1'd1;
-				sd_rd  <=  bk_loading;
-				sd_wr  <= ~bk_loading;
+				sd_rd <=  bk_loading;
+				sd_wr <= ~bk_loading;
 			end
 		end
+	end
+	else if(bk_loading) begin
+		case(state)
+			0: begin
+					sd_rd <= 1;
+					state <= 1;
+				end
+			1: if(old_ack & ~sd_ack) begin
+					tmpram_tx_start <= 1;
+					state <= 2;
+				end
+			2: if(tmpram_tx_finish) begin
+					tmpram_tx_start <= 0;
+					state <= 0;
+					sd_lba <= sd_lba + 1'd1;
+					if(sd_lba[10:0] == 11'h40F) bk_state <= 0;
+				end
+		endcase
+	end
+	else begin
+		case(state)
+			0: begin
+					tmpram_tx_start <= 1;
+					state <= 1;
+				end
+			1: if(tmpram_tx_finish) begin
+					tmpram_tx_start <= 0;
+					sd_wr <= 1;
+					state <= 2;
+				end
+			2: if(old_ack & ~sd_ack) begin
+					state <= 0;
+					sd_lba <= sd_lba + 1'd1;
+					if(sd_lba[10:0] == 11'h40F) bk_state <= 0;
+				end
+		endcase
 	end
 end
 
