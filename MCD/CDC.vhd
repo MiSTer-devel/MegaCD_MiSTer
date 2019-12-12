@@ -164,7 +164,7 @@ architecture rtl of CDC is
 	
 begin
 
-	EN <= ENABLE and (CLKEN_N);
+	EN <= ENABLE and (CLKEN_N or CLKEN_P);
 	
 	process( RESET_N, CLK )
 	begin

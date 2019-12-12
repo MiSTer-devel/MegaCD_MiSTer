@@ -88,6 +88,10 @@ module gen
 	output        INTERLACE,
 	output        FIELD,
 	output  [1:0] RESOLUTION,
+	
+	input         EN_BGA,
+	input         EN_BGB,
+	input         EN_SPR,
 
 	input         J3BUT,
 	input  [11:0] JOY_1,
@@ -412,6 +416,10 @@ vdp vdp
 	.FIELD_OUT(FIELD),
 	.INTERLACE(INTERLACE),
 	.RESOLUTION(RESOLUTION),
+	
+	.EN_BGA(EN_BGA),
+	.EN_BGB(EN_BGB),
+	.EN_SPR(EN_SPR),
 
 	.PAL(PAL),
 	.R(RED),

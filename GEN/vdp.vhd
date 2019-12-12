@@ -101,6 +101,10 @@ entity vdp is
 		B           : out std_logic_vector(3 downto 0);
 		HS          : out std_logic;
 		VS          : out std_logic;
+		
+		EN_BGA      : in  std_logic := '1';
+		EN_BGB      : in  std_logic := '1';
+		EN_SPR      : in  std_logic := '1';
 
 		SVP_QUIRK   : in  std_logic := '0';
 		VRAM_SPEED  : in  std_logic := '1'; -- 0 - full speed, 1 - FIFO throttle emulation
@@ -2578,18 +2582,18 @@ begin
 				end if;
 
 				if OBJ_COLINFO2_Q(3 downto 0) /= "0000" and OBJ_COLINFO2_Q(6) = '1' and
-					(SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") then
+					(SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") and EN_SPR = '1' then
 					col := OBJ_COLINFO2_Q(5 downto 0);
-				elsif BGA_COLINFO_Q_B(3 downto 0) /= "0000" and BGA_COLINFO_Q_B(6) = '1' then
+				elsif BGA_COLINFO_Q_B(3 downto 0) /= "0000" and BGA_COLINFO_Q_B(6) = '1' and EN_BGA = '1' then
 					col := BGA_COLINFO_Q_B(5 downto 0);
-				elsif BGB_COLINFO_Q_B(3 downto 0) /= "0000" and BGB_COLINFO_Q_B(6) = '1' then
+				elsif BGB_COLINFO_Q_B(3 downto 0) /= "0000" and BGB_COLINFO_Q_B(6) = '1' and EN_BGB = '1' then
 					col := BGB_COLINFO_Q_B(5 downto 0);
 				elsif OBJ_COLINFO2_Q(3 downto 0) /= "0000" and
-					(SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") then
+					(SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") and EN_SPR = '1' then
 					col := OBJ_COLINFO2_Q(5 downto 0);
-				elsif BGA_COLINFO_Q_B(3 downto 0) /= "0000" then
+				elsif BGA_COLINFO_Q_B(3 downto 0) /= "0000" and EN_BGA = '1' then
 					col := BGA_COLINFO_Q_B(5 downto 0);
-				elsif BGB_COLINFO_Q_B(3 downto 0) /= "0000" then
+				elsif BGB_COLINFO_Q_B(3 downto 0) /= "0000" and EN_BGB = '1' then
 					col := BGB_COLINFO_Q_B(5 downto 0);
 				else
 					col := BGCOL;

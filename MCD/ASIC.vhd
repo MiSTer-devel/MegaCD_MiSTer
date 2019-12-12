@@ -162,6 +162,7 @@ architecture rtl of ASIC is
 	signal WR1S 						: WordRamState_t;
 	signal WR0R 						: WordRam_r;
 	signal WR1R 						: WordRam_r;
+	signal LAST_M68K_WORDRAM_DO	: std_logic_vector(15 downto 0);
 	
 	--BROM
 	signal ROMS 						: RomState_t;
@@ -341,46 +342,30 @@ begin
 			RET_SET <= '0';
 			DMNA_REQ <= '0';
 			DMNA_SET <= '0';
+			
+			MODE <= '0';
 		elsif rising_edge(CLK) then
 			if M68K_GA_SEL = '1' and EXT_VA(5 downto 1) = "00001" and EXT_RNW = '0' and EXT_LDS_N = '0' and M68K_REG_DTACK_N = '1' then
-				if DMNA_REQ = '0' then
-					if EXT_VDI(1) = '1' then
-						DMNA0 <= '0';
-						DMNA_SET <= EXT_VDI(1);
-						DMNA_REQ <= '1';
-					elsif EXT_VDI(1) = '0' then
-						DMNA1 <= '1';
-					end if;
+				if EXT_VDI(1) = '1' then
+					DMNA0 <= '1';
+					RET0 <= '0';
+				elsif EXT_VDI(1) = '0' then
+					DMNA1 <= '1';
 				end if;
 			end if;
 				
 			if EN = '1' then
 				if S68K_GA_SEL = '1' and S68K_A(7 downto 1) = "0000001" and S68K_RNW = '0' and S68K_REG_DTACK_N = '1' then
-					if RET_REQ = '0' then
-						if S68K_DI(0) = '1' then
-							RET0 <= '0';
-						end if;
-						RET_SET <= S68K_DI(0);
-						RET_REQ <= '1';
-					end if;
-				end if;
-
-				if DMNA_REQ = '1' and WR0S = WRS_IDLE and WR1S = WRS_IDLE then
-					if DMNA_SET = '1' then
-						DMNA0 <= '1';
-						RET0 <= '0';
-					end if;
-					DMNA_REQ <= '0';
-				elsif RET_REQ = '1' and WR0S = WRS_IDLE and WR1S = WRS_IDLE then
-					if RET_SET = '1' then
+					if S68K_DI(0) = '1' then
 						RET0 <= '1';
 						DMNA0 <= '0';
 					end if;
-					if RET1 /= RET_SET then
+					RET1 <= S68K_DI(0);
+					if RET1 /= S68K_DI(0) then
 						DMNA1 <= '0';
-						RET1 <= RET_SET;
 					end if;
-					RET_REQ <= '0';
+					
+					MODE <= S68K_DI(2);
 				end if;
 			end if;
 		end if;
@@ -408,108 +393,103 @@ begin
 					DS <= DS_IDLE;
 				end if;
 				
-				if CLK_12M_F = '1' or CLK_12M_R = '1' then
-					case DS is
-						when DS_IDLE =>
-							if CDC_DTEN_N = '0' then
-								if CDC_WAIT_N = '1' then
-									CDC_HRD <= '1';
-									DS <= DS_CDC_READ;
-									
-									DMA_RUN <= DD(2);
-								end if;
-								EDT <= '0';
-							elsif CDC_DTEN_N = '1' then
-								DMA_RUN <= '0';
-								if DMA_RUN = '1' and DD(2) = '1' then
-									DSR <= '0';
-								end if;
-								EDT <= '1';
-							end if;
-							
-						when DS_CDC_READ =>
-							if CDC_WAIT_N = '0' then
-								CDC_HRD <= '0';
+				case DS is
+					when DS_IDLE =>
+						if CDC_DTEN_N = '0' then
+							if CDC_WAIT_N = '1' then
+								CDC_HRD <= '1';
+								DS <= DS_CDC_READ;
 								
-								if DMA_BYTE = '0' and DD /= "100" then
-									DMA_DAT(15 downto 8) <= CDC_HDI;
-									DMA_BYTE <= '1';
-									DS <= DS_IDLE;
-								else
-									DMA_DAT(7 downto 0) <= CDC_HDI;
-									DMA_BYTE <= '0';
-									DSR <= '1';
-									DS <= DS_WRITE;
-								end if;
+								DMA_RUN <= DD(2);
 							end if;
+							EDT <= '0';
+						elsif CDC_DTEN_N = '1' then
+							DMA_RUN <= '0';
+							if DMA_RUN = '1' and DD(2) = '1' then
+								DSR <= '0';
+							end if;
+							EDT <= '1';
+						end if;
 						
-						when DS_WRITE =>
-							case DD is
-								when "010" | "011" =>
-									HD <= DMA_DAT;
+					when DS_CDC_READ =>
+						if CDC_WAIT_N = '0' then
+							CDC_HRD <= '0';
+							
+							if DMA_BYTE = '0' and DD /= "100" then
+								DMA_DAT(15 downto 8) <= CDC_HDI;
+								DMA_BYTE <= '1';
+								DS <= DS_IDLE;
+							else
+								DMA_DAT(7 downto 0) <= CDC_HDI;
+								DMA_BYTE <= '0';
+								DSR <= '1';
+								DS <= DS_WRITE;
+							end if;
+						end if;
+					
+					when DS_WRITE =>
+						case DD is
+							when "010" | "011" =>
+								HD <= DMA_DAT;
+								DS <= DS_WRITE_WAIT;
+							
+							when "100" =>
+								if PCM_DMA_RUN = '1' then
 									DS <= DS_WRITE_WAIT;
-								
-								when "100" =>
-									if PCM_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-								
-								when "101" =>
-									if PR_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-									
-								when "111" =>
-									if WR_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-									
-								when others =>
-									DS <= DS_IDLE;
-							end case;
+								end if;
 							
-						when DS_WRITE_WAIT =>
-							case DD is
-								when "010" =>
-									if MAIN_CPU_CDC_READ = '1' then
-										DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
-									
-								when "011" =>
-									if SUB_CPU_CDC_READ = '1' then
-										DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
+							when "101" =>
+								if PR_DMA_RUN = '1' then
+									DS <= DS_WRITE_WAIT;
+								end if;
 								
-								when "100" =>
-									if PCM_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-	--									DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
+							when "111" =>
+								if WR_DMA_RUN = '1' then
+									DS <= DS_WRITE_WAIT;
+								end if;
 								
-								when "101" =>
-									if PR_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-	--									DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
-									
-								when "111" =>
-									if WR_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-	--									DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
-									
-								when others =>
+							when others =>
+								DS <= DS_IDLE;
+						end case;
+						
+					when DS_WRITE_WAIT =>
+						case DD is
+							when "010" =>
+								if MAIN_CPU_CDC_READ = '1' then
+									DSR <= '0';
 									DS <= DS_IDLE;
-							end case;
+								end if;
+								
+							when "011" =>
+								if SUB_CPU_CDC_READ = '1' then
+									DSR <= '0';
+									DS <= DS_IDLE;
+								end if;
 							
-						when others => null;
-					end case;
-				end if;
+							when "100" =>
+								if PCM_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+							
+							when "101" =>
+								if PR_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+								
+							when "111" =>
+								if WR_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+								
+							when others =>
+								DS <= DS_IDLE;
+						end case;
+						
+					when others => null;
+				end case;
 			end if;
 		end if;
 	end process;
@@ -586,11 +566,7 @@ begin
 						when "00101" => null;	--$A1200A Reserved
 						when "00110" => null;	--$A1200C Stop watch (read only)
 						when "00111" =>			--$A1200E Communication flag
-							if EXT_UDS_N = '0' then
-								CFM <= EXT_VDI(15 downto 8);
-							else
-								CFM <= EXT_VDI(7 downto 0);
-							end if;
+							CFM <= EXT_VDI(15 downto 8);
 						when "01000" =>			--$A12010 Communication command 0
 							if EXT_LDS_N = '0' then
 								CC(0)(7 downto 0) <= EXT_VDI(7 downto 0);
@@ -798,7 +774,7 @@ begin
 			RES0 <= '1';
 			LEDG <= '0';
 			LEDR <= '0';
-			MODE <= '0';
+--			MODE <= '0';
 			PM <= (others => '0');
 			CFS <= (others => '0');
 			CS <= (others => (others => '0'));
@@ -898,7 +874,7 @@ begin
 								end if;
 							when "0000001" =>			--$FF8002 Memory mode
 	--							if S68K_LDS_N = '0' then
-									MODE <= S68K_DI(2);
+--									MODE <= S68K_DI(2);
 									PM <= S68K_DI(4 downto 3);
 	--							end if;
 							when "0000010" =>			--$FF8004 CDC Mode/CDC register address (extern)
@@ -1670,7 +1646,6 @@ begin
 	DMA_WORD_RAM_SEL <= '1' when DD = "111" and DS = DS_WRITE else '0';
 	
 	process( RST_N, CLK )
-	variable EXT_VA2 : std_logic_vector(17 downto 1);
 	begin
 		if RST_N = '0' then
 			M68K_WORDRAM_DTACK_N <= '1';
@@ -1682,26 +1657,13 @@ begin
 			WR1A <= WRA_IDLE;
 		elsif rising_edge(CLK) then
 			if EN = '1' then
-				if EXT_AS_N = '0' then
-					EXT_VA2 := EXT_VA;
-				else
-					EXT_VA2 := std_logic_vector( unsigned(EXT_VA) - 1 );
-				end if;
-				
 				case WR0A is
 					when WRA_IDLE =>
 						WR0R.DOT_IMAGE <= (others => '0');
 						if MODE = '1' then	--1M MODE
 							if RET1 = '0' then 
-								if M68K_WORD_RAM_SEL = '1' and EXT_VA(17) = '0' and M68K_WORDRAM_DTACK_N = '1' then
-									WR0R.A <= EXT_VA2(16 downto 1);
-									WR0R.DO <= EXT_VDI;
-									WR0R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
-									WR0R.PM <= "00";
-									WR0R.EXEC <= '1';
-									WR0A <= WRA_M68K_ACCESS;
-								elsif M68K_WORD_RAM_SEL = '1' and EXT_VA(17) = '1' and M68K_WORDRAM_DTACK_N = '1' then
-									WR0R.A <= EXT_VA2(16 downto 1);
+								if M68K_WORD_RAM_SEL = '1' and M68K_WORDRAM_DTACK_N = '1' then
+									WR0R.A <= EXT_VA(16 downto 1);
 									WR0R.DO <= EXT_VDI;
 									WR0R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
 									WR0R.PM <= "00";
@@ -1740,12 +1702,12 @@ begin
 								end if;
 							end if;
 						else						--2M MODE
-							if M68K_WORD_RAM_SEL = '1' and EXT_VA2(1) = '0' and M68K_WORDRAM_DTACK_N = '1' then
-								if DMNA0 = '1' then
+							if M68K_WORD_RAM_SEL = '1' and EXT_VA(1) = '0' and M68K_WORDRAM_DTACK_N = '1' then
+								if RET0 = '0' then
 									M68K_WORDRAM_DTACK_N <= '0';
 									WR0A <= WRA_M68K_END;
 								else
-									WR0R.A <= EXT_VA2(17 downto 2);
+									WR0R.A <= EXT_VA(17 downto 2);
 									WR0R.DO <= EXT_VDI;
 									WR0R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
 									WR0R.PM <= "00";
@@ -1782,7 +1744,12 @@ begin
 					when WRA_M68K_ACCESS =>
 						if WR0S = WRS_END then
 							WR0R.EXEC <= '0';
-							M68K_WORDRAM_DO <= WORD_RAM_1M0_DI;
+							LAST_M68K_WORDRAM_DO <= WORD_RAM_1M0_DI;
+							if EXT_AS_N = '0' then
+								M68K_WORDRAM_DO <= WORD_RAM_1M0_DI;
+							else
+								M68K_WORDRAM_DO <= LAST_M68K_WORDRAM_DO;
+							end if;
 							M68K_WORDRAM_DTACK_N <= '0';
 							WR0A <= WRA_M68K_END;
 						end if;
@@ -1842,15 +1809,8 @@ begin
 						WR1R.DOT_IMAGE <= (others => '0');
 						if MODE = '1' then	--1M MODE
 							if RET1 = '1' then 
-								if M68K_WORD_RAM_SEL = '1' and EXT_VA(17) = '0' and M68K_WORDRAM_DTACK_N = '1' then
-									WR1R.A <= EXT_VA2(16 downto 1);
-									WR1R.DO <= EXT_VDI;
-									WR1R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
-									WR1R.PM <= "00";
-									WR1R.EXEC <= '1';
-									WR1A <= WRA_M68K_ACCESS;
-								elsif M68K_WORD_RAM_SEL = '1' and EXT_VA(17) = '1' and M68K_WORDRAM_DTACK_N = '1' then
-									WR1R.A <= EXT_VA2(16 downto 1);
+								if M68K_WORD_RAM_SEL = '1' and M68K_WORDRAM_DTACK_N = '1' then
+									WR1R.A <= EXT_VA(16 downto 1);
 									WR1R.DO <= EXT_VDI;
 									WR1R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
 									WR1R.PM <= "00";
@@ -1889,12 +1849,12 @@ begin
 								end if;
 							end if;
 						else						--2M MODE
-							if M68K_WORD_RAM_SEL = '1' and EXT_VA2(1) = '1' and M68K_WORDRAM_DTACK_N = '1' then
-								if DMNA0 = '1' then
+							if M68K_WORD_RAM_SEL = '1' and EXT_VA(1) = '1' and M68K_WORDRAM_DTACK_N = '1' then
+								if RET0 = '0' then
 									M68K_WORDRAM_DTACK_N <= '0';
 									WR1A <= WRA_M68K_END;
 								else
-									WR1R.A <= EXT_VA2(17 downto 2);
+									WR1R.A <= EXT_VA(17 downto 2);
 									WR1R.DO <= EXT_VDI;
 									WR1R.RNW <= (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_UDS_N) & (EXT_RNW or EXT_LDS_N) & (EXT_RNW or EXT_LDS_N);
 									WR1R.PM <= "00";
@@ -1931,7 +1891,12 @@ begin
 					when WRA_M68K_ACCESS =>
 						if WR1S = WRS_END then
 							WR1R.EXEC <= '0';
-							M68K_WORDRAM_DO <= WORD_RAM_1M1_DI;
+							LAST_M68K_WORDRAM_DO <= WORD_RAM_1M1_DI;
+							if EXT_AS_N = '0' then
+								M68K_WORDRAM_DO <= WORD_RAM_1M1_DI;
+							else
+								M68K_WORDRAM_DO <= LAST_M68K_WORDRAM_DO;
+							end if;
 							M68K_WORDRAM_DTACK_N <= '0';
 							WR1A <= WRA_M68K_END;
 						end if;
