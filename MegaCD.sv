@@ -223,6 +223,9 @@ localparam CONF_STR = {
 	"H2OC,Enable PSG,Yes,No;",//12
 	"H2OP,Enable PCM,Yes,No;",//25
 	"H2OQ,Enable CDDA,Yes,No;",//26
+	"H2o4,Enable BGA,Yes,No;",//36
+	"H2o5,Enable BGB,Yes,No;",//37
+	"H2o6,Enable SPR,Yes,No;",//38
 	"H2-;",
 	//"R1,Reset;"
 	"R0,Reset & Eject CD;",
@@ -376,6 +379,9 @@ wire EN_GEN_FM   = ~status[11] | ~dbg_menu;
 wire EN_GEN_PSG  = ~status[12] | ~dbg_menu;
 wire EN_MCD_PCM  = ~status[25] | ~dbg_menu;
 wire EN_MCD_CDDA = ~status[26] | ~dbg_menu;
+wire EN_VDP_BGA  = ~status[36] | ~dbg_menu;
+wire EN_VDP_BGB  = ~status[37] | ~dbg_menu;
+wire EN_VDP_SPR  = ~status[38] | ~dbg_menu;
 
 gen gen
 (
@@ -424,6 +430,9 @@ gen gen
 	.FIELD(VGA_F1),
 	.INTERLACE(interlace),
 	.RESOLUTION(resolution),
+	.EN_BGA(EN_VDP_BGA),
+	.EN_BGB(EN_VDP_BGB),
+	.EN_SPR(EN_VDP_SPR),
 
 	.J3BUT(~status[5]),
 	.JOY_1(status[4] ? joystick_1 : joystick_0),
