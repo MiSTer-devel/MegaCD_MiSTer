@@ -393,105 +393,103 @@ begin
 					DS <= DS_IDLE;
 				end if;
 				
-				if CLK_12M_F = '1' or CLK_12M_R = '1' then
-					case DS is
-						when DS_IDLE =>
-							if CDC_DTEN_N = '0' then
-								if CDC_WAIT_N = '1' then
-									CDC_HRD <= '1';
-									DS <= DS_CDC_READ;
-									
-									DMA_RUN <= DD(2);
-								end if;
-								EDT <= '0';
-							elsif CDC_DTEN_N = '1' then
-								DMA_RUN <= '0';
-								if DMA_RUN = '1' and DD(2) = '1' then
-									DSR <= '0';
-								end if;
-								EDT <= '1';
-							end if;
-							
-						when DS_CDC_READ =>
-							if CDC_WAIT_N = '0' then
-								CDC_HRD <= '0';
+				case DS is
+					when DS_IDLE =>
+						if CDC_DTEN_N = '0' then
+							if CDC_WAIT_N = '1' then
+								CDC_HRD <= '1';
+								DS <= DS_CDC_READ;
 								
-								if DMA_BYTE = '0' and DD /= "100" then
-									DMA_DAT(15 downto 8) <= CDC_HDI;
-									DMA_BYTE <= '1';
-									DS <= DS_IDLE;
-								else
-									DMA_DAT(7 downto 0) <= CDC_HDI;
-									DMA_BYTE <= '0';
-									DSR <= '1';
-									DS <= DS_WRITE;
-								end if;
+								DMA_RUN <= DD(2);
 							end if;
+							EDT <= '0';
+						elsif CDC_DTEN_N = '1' then
+							DMA_RUN <= '0';
+							if DMA_RUN = '1' and DD(2) = '1' then
+								DSR <= '0';
+							end if;
+							EDT <= '1';
+						end if;
 						
-						when DS_WRITE =>
-							case DD is
-								when "010" | "011" =>
-									HD <= DMA_DAT;
+					when DS_CDC_READ =>
+						if CDC_WAIT_N = '0' then
+							CDC_HRD <= '0';
+							
+							if DMA_BYTE = '0' and DD /= "100" then
+								DMA_DAT(15 downto 8) <= CDC_HDI;
+								DMA_BYTE <= '1';
+								DS <= DS_IDLE;
+							else
+								DMA_DAT(7 downto 0) <= CDC_HDI;
+								DMA_BYTE <= '0';
+								DSR <= '1';
+								DS <= DS_WRITE;
+							end if;
+						end if;
+					
+					when DS_WRITE =>
+						case DD is
+							when "010" | "011" =>
+								HD <= DMA_DAT;
+								DS <= DS_WRITE_WAIT;
+							
+							when "100" =>
+								if PCM_DMA_RUN = '1' then
 									DS <= DS_WRITE_WAIT;
-								
-								when "100" =>
-									if PCM_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-								
-								when "101" =>
-									if PR_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-									
-								when "111" =>
-									if WR_DMA_RUN = '1' then
-										DS <= DS_WRITE_WAIT;
-									end if;
-									
-								when others =>
-									DS <= DS_IDLE;
-							end case;
+								end if;
 							
-						when DS_WRITE_WAIT =>
-							case DD is
-								when "010" =>
-									if MAIN_CPU_CDC_READ = '1' then
-										DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
-									
-								when "011" =>
-									if SUB_CPU_CDC_READ = '1' then
-										DSR <= '0';
-										DS <= DS_IDLE;
-									end if;
+							when "101" =>
+								if PR_DMA_RUN = '1' then
+									DS <= DS_WRITE_WAIT;
+								end if;
 								
-								when "100" =>
-									if PCM_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-										DS <= DS_IDLE;
-									end if;
+							when "111" =>
+								if WR_DMA_RUN = '1' then
+									DS <= DS_WRITE_WAIT;
+								end if;
 								
-								when "101" =>
-									if PR_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-										DS <= DS_IDLE;
-									end if;
-									
-								when "111" =>
-									if WR_DMA_RUN = '0' then
-										DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
-										DS <= DS_IDLE;
-									end if;
-									
-								when others =>
+							when others =>
+								DS <= DS_IDLE;
+						end case;
+						
+					when DS_WRITE_WAIT =>
+						case DD is
+							when "010" =>
+								if MAIN_CPU_CDC_READ = '1' then
+									DSR <= '0';
 									DS <= DS_IDLE;
-							end case;
+								end if;
+								
+							when "011" =>
+								if SUB_CPU_CDC_READ = '1' then
+									DSR <= '0';
+									DS <= DS_IDLE;
+								end if;
 							
-						when others => null;
-					end case;
-				end if;
+							when "100" =>
+								if PCM_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+							
+							when "101" =>
+								if PR_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+								
+							when "111" =>
+								if WR_DMA_RUN = '0' then
+									DMA_ADDR <= std_logic_vector( unsigned(DMA_ADDR) + 1 );
+									DS <= DS_IDLE;
+								end if;
+								
+							when others =>
+								DS <= DS_IDLE;
+						end case;
+						
+					when others => null;
+				end case;
 			end if;
 		end if;
 	end process;
