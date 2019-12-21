@@ -24,20 +24,23 @@ end CD_DAC;
 
 architecture rtl of CD_DAC is
 
-	signal EN : std_logic;
+	signal EN 			: std_logic;
 	
-	signal CD_WR_OLD : std_logic;
-	signal LR : std_logic;
-	signal FULL : std_logic;
-	signal EMPTY : std_logic;
-	signal RD_REQ : std_logic;
-	signal WR_REQ : std_logic;
-	signal FIFO_DATA : std_logic_vector(31 downto 0);
-	signal FIFO_Q : std_logic_vector(31 downto 0);
-	signal SAMPLE_CE : std_logic;
+	signal CD_WR_OLD 	: std_logic;
+	signal LR 			: std_logic;
+	signal FULL 		: std_logic;
+	signal EMPTY 		: std_logic;
+	signal RD_REQ 		: std_logic;
+	signal WR_REQ 		: std_logic;
+	signal FIFO_D 		: std_logic_vector(31 downto 0);
+	signal FIFO_Q 		: std_logic_vector(31 downto 0);
+	signal SAMPLE_CE 	: std_logic;
 
-	signal OUTL : signed(15 downto 0);
-	signal OUTR : signed(15 downto 0);
+	signal ATT 			: unsigned(10 downto 0);
+	signal ATT_CUR 	: unsigned(11 downto 0);
+	
+	signal OUTL 		: signed(15 downto 0);
+	signal OUTR 		: signed(15 downto 0);
 
 begin
 
@@ -47,7 +50,7 @@ begin
 	begin
 		if RST_N = '0' then
 			LR <= '0';
-			FIFO_DATA <= (others => '0');
+			FIFO_D <= (others => '0');
 			WR_REQ <= '0';
 			CD_WR_OLD <= '0';
 		elsif rising_edge(CLK) then
@@ -57,9 +60,9 @@ begin
 				if CD_WR = '1' and CD_WR_OLD = '0' then
 					LR <= not LR;
 					if LR = '0' then
-						FIFO_DATA(15 downto 0) <= CD_DI;
+						FIFO_D(15 downto 0) <= CD_DI;
 					else
-						FIFO_DATA(31 downto 16) <= CD_DI;
+						FIFO_D(31 downto 16) <= CD_DI;
 						if FULL = '0' and DM = '0' then
 							WR_REQ <= '1';
 						end if;
@@ -72,7 +75,7 @@ begin
 	FIFO : entity work.CDDA_FIFO 
 	port map(
 		clock		=> CLK,
-		data		=> FIFO_DATA,
+		data		=> FIFO_D,
 		wrreq		=> WR_REQ,
 		full		=> FULL,
 		
@@ -93,17 +96,37 @@ begin
 	process( RST_N, CLK )
 	begin
 		if RST_N = '0' then
+			ATT <= "10000000000";
+		elsif rising_edge(CLK) then
+			if EN = '1' then
+				if FD_WR = '1' then
+					ATT <= unsigned(FD_DI);
+				end if;
+			end if;
+		end if;
+	end process;
+	
+	process( RST_N, CLK )
+	begin
+		if RST_N = '0' then
 			RD_REQ <= '0';
+			ATT_CUR <= "010000000000";
 		elsif rising_edge(CLK) then
 			RD_REQ <= '0';
 			if EN = '1' and SAMPLE_CE = '1' then	-- ~44.1kHz
 				if EMPTY = '0' then
 					RD_REQ <= '1';
-					OUTL <= signed(FIFO_Q(15 downto 0));
-					OUTR <= signed(FIFO_Q(31 downto 16));
+					OUTL <= resize(shift_right(signed(FIFO_Q(15 downto 0)) * signed(ATT_CUR), 10), OUTL'length);
+					OUTR <= resize(shift_right(signed(FIFO_Q(31 downto 16)) * signed(ATT_CUR), 10), OUTR'length);
 				else
 					OUTL <= (others => '0');
 					OUTR <= (others => '0');
+				end if;
+				
+				if ATT_CUR(10 downto 0) > ATT then
+					ATT_CUR <= "0" & (ATT_CUR(10 downto 0) - 1);
+				elsif ATT_CUR(10 downto 0) < ATT then
+					ATT_CUR <= "0" & (ATT_CUR(10 downto 0) + 1);
 				end if;
 			end if;
 		end if;
