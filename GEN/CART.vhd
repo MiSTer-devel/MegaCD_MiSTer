@@ -52,6 +52,7 @@ architecture rtl of CART is
 	signal CART_RAM_DTACK_N : std_logic;
 	signal CART_ROM_DO 		: std_logic_vector(15 downto 0);
 	signal CART_RAM_DO 		: std_logic_vector(15 downto 0);
+	signal CART_RAM_WP 		: std_logic_vector(7 downto 0);
 
 begin
 
@@ -111,21 +112,31 @@ begin
 			RAMS <= MS_IDLE;
 			CART_RAM_DTACK_N <= '1';
 			CART_RAM_DO <= (others => '0');
+			CART_RAM_WP <= (others => '1');
 			RAM_CE_N <= '1';
 		elsif rising_edge(CLK) then
 			case RAMS is
 				when MS_IDLE =>
 					if CART_RAM_SEL = '1' and CART_RAM_DTACK_N = '1' then
-						if VA(21) = '0' and RNW = '1' then						--RAM CART ID
+						if VA(21) = '0' then						--RAM CART ID 400000-5FFFFF
 							CART_RAM_DTACK_N <= '0';
 							CART_RAM_DO <= x"FF" & RAM_ID;
 							RAMS <= MS_END;
-						elsif VA(21 downto 20) = "10" and LDS_N = '0' then	--RAM CART memory
-							RAM_CE_N <= '0';
-							RAMS <= MS_WAIT;
-						else																--RAM CART write protection TODO
+						elsif VA(21 downto 20) = "10" then	--RAM CART memory 600000-6FFFFF
+							if RNW = '1' or (RNW = '0' and LDS_N = '0' and CART_RAM_WP(0) = '1') then
+								RAM_CE_N <= '0';
+								RAMS <= MS_WAIT;
+							else
+								CART_RAM_DTACK_N <= '0';
+								RAMS <= MS_END;
+							end if;
+						else											--RAM CART write protection 700000-7FFFFF
+							if RNW = '1' then
+								CART_RAM_DO <= x"FF" & CART_RAM_WP;
+							else
+								CART_RAM_WP <= VDI(7 downto 0);
+							end if;
 							CART_RAM_DTACK_N <= '0';
-							CART_RAM_DO <= x"FFFF";
 							RAMS <= MS_END;
 						end if;
 					end if;
