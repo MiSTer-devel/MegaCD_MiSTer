@@ -126,6 +126,9 @@ architecture rtl of MCD is
 	signal PCM_RAM_DI_B	: std_logic_vector(7 downto 0);
 	signal PCM_RAM_DO_A	: std_logic_vector(7 downto 0);
 	signal PCM_RAM_WE_A	: std_logic;
+	
+	signal ASIC_FD_DAT	: std_logic_vector(10 downto 0);
+	signal ASIC_FD_WR		: std_logic;
 
 begin
 
@@ -246,6 +249,9 @@ begin
 		WORDRAM1_DI   	=> WORDRAM1_DI,
 		WORDRAM1_DO   	=> WORDRAM1_DO,
 		WORDRAM1_WR   	=> WORDRAM1_WR,
+		
+		FD_DAT 			=> ASIC_FD_DAT,
+		FD_WR 			=> ASIC_FD_WR,
 		
 		LED_RED   		=> LED_RED,
 		LED_GREEN   	=> LED_GREEN
@@ -368,8 +374,8 @@ begin
 		CD_DI   		=> CDC_DATA,
 		CD_WR   		=> CDC_DAT_WR,
 		
-		FD_DI   		=> (others => '0'),
-		FD_WR   		=> '0',
+		FD_DI   		=> ASIC_FD_DAT,
+		FD_WR   		=> ASIC_FD_WR,
 		
 		DM   			=> CDD_DM,
 		

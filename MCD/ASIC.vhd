@@ -93,6 +93,9 @@ entity ASIC is
 		WORDRAM1_DO		: out std_logic_vector(15 downto 0);
 		WORDRAM1_WR		: out std_logic;
 		
+		FD_DAT			: out std_logic_vector(10 downto 0);
+		FD_WR				: out std_logic;
+		
 		LED_RED			: out std_logic;
 		LED_GREEN		: out std_logic
 	);
@@ -811,6 +814,7 @@ begin
 			OLD_CDC_INT_N <= '1';
 			HOCK_OLD <= '0';
 			SW_CLR <= '0';
+			FD_WR <= '0';
 			
 			INT_PEND(3) <= '0';
 			INT_PEND(4) <= '0';
@@ -827,6 +831,7 @@ begin
 				
 				DMA_ADDR_SET <= '0';
 				VW_SET <= '0';
+				FD_WR <= '0';
 				
 				if GS = GS_END then
 					GRON <= '0';
@@ -964,6 +969,8 @@ begin
 									IEN <= S68K_DI(6 downto 1);	
 								end if;
 							when "0011010" => null;	--$FF8034 CD fader
+								FD_DAT <= S68K_DI(14 downto 4);
+								FD_WR <= '1';
 							when "0011011" =>			--$FF8036 CDD control
 								if S68K_LDS_N = '0' then
 									HOCK <= S68K_DI(2);
@@ -1130,7 +1137,7 @@ begin
 							when "0011001" =>			--$FF8032 Inerrupt mask control
 								S68K_REG_DO <= x"00" & "0" & IEN & "0";	
 							when "0011010" =>			--$FF8034 CD fader
-								S68K_REG_DO <= x"0000";	---------------------------------------------------
+								S68K_REG_DO <= x"0000";
 							when "0011011" =>			--$FF8036 CDD control
 								S68K_REG_DO <= "0000000" & CDD_DM & "00000" & HOCK & "00";
 							when "0011100" =>			--$FF8038 CDD status 0,1
