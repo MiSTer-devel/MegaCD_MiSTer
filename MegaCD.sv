@@ -623,8 +623,8 @@ sdram sdram
 	.init(~locked),
 	.clk(clk_ram),
 	
-	.addr0({4'b0000,MCD_PRG_ADDR}),
-	.bank0(2'd0),
+	.addr0({5'b00000,MCD_PRG_ADDR}),
+	.bank0(0),
 	.din0(MCD_PRG_DO),
 	.dout0(MCD_PRG_DI),
 	.rd0(~MCD_PRG_OE_N),
@@ -633,12 +633,12 @@ sdram sdram
 	.rfs0(MCD_PRG_RFS),
 	.busy0(MCD_PRG_BUSY),
 	
-	.addr1(rom_download ? {1'b0,ioctl_addr[21:1]} : 									//ROM 000000-3FFFFF
-			 !GEN_RAM_CE_N ? {7'b1000000,GEN_VA[15:1]} : 								//WORK RAM 400000-40FFFF
-			 !CART_RAM_CE_N ? {3'b110,GEN_VA[19:1]} : 									//CART RAM 600000-6FFFFF
-			 !CART_ROM_CE_N ? {1'b0,GEN_VA[21:1] & {rom_mask[21:13],12'hFFF}} :	//CART ROM 000000-3FFFFF
-			 {6'b000000,GEN_VA[16:1]} ),														//BIOS ROM 000000-01FFFF
-	.bank1(2'd1),
+	.addr1(rom_download ? {1'b0,ioctl_addr[22:1]} : 									//ROM 000000-3FFFFF
+			 !GEN_RAM_CE_N ? {8'b10000000,GEN_VA[15:1]} : 								//WORK RAM 400000-40FFFF
+			 !CART_RAM_CE_N ? {4'b1110,GEN_VA[19:1]} : 									//CART RAM 600000-6FFFFF
+			 !CART_ROM_CE_N ? {2'b00,GEN_VA[21:1] & {rom_mask[22:13],12'hFFF}} :	//CART ROM 000000-3FFFFF
+			 {7'b0000000,GEN_VA[16:1]} ),														//BIOS ROM 000000-01FFFF
+	.bank1(1),
 	.din1(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : GEN_VDO),
 	.dout1(GEN_MEM_DO),
 	.rd1(rom_download ? 1'b0 : (~GEN_RAM_CE_N | ~GEN_ROM_CE_N | ~CART_RAM_CE_N | ~CART_ROM_CE_N) & ~GEN_OE_N),
@@ -647,8 +647,8 @@ sdram sdram
 	.rfs1(GEN_RFS & rom_cart_mode),
 	.busy1(GEN_MEM_BUSY),
 	
-	.addr2({3'b110,tmpram_lba[9:0],tmpram_addr}), //CART RAM 600000-6FFFFF for sd_*
-	.bank2(2'd1),
+	.addr2({4'b1110,tmpram_lba[9:0],tmpram_addr}), //CART RAM 600000-6FFFFF for sd_*
+	.bank2(1),
 	.din2({tmpram_dout,tmpram_dout}),
 	.dout2(tmpram_din),
 	.rd2(tmpram_req & ~bk_loading),

@@ -38,8 +38,8 @@ module sdram
 	input             init,			// init signal after FPGA config to initialize RAM
 	input             clk,			// sdram is accessed at up to 128MHz
 
-	input      [22:1] addr0,
-	input       [1:0] bank0,
+	input      [23:1] addr0,
+	input             bank0,
 	input             rd0,
 	input             wrl0,
 	input             wrh0,
@@ -48,8 +48,8 @@ module sdram
 	input             rfs0,
 	output            busy0,
 	
-	input      [22:1] addr1,
-	input       [1:0] bank1,
+	input      [23:1] addr1,
+	input             bank1,
 	input             rd1,
 	input             wrl1,
 	input             wrh1,
@@ -58,8 +58,8 @@ module sdram
 	input             rfs1,
 	output            busy1,
 	
-	input      [22:1] addr2,
-	input       [1:0] bank2,
+	input      [23:1] addr2,
+	input             bank2,
 	input             rd2,
 	input             wrl2,
 	input             wrh2,
@@ -120,8 +120,7 @@ always @(posedge clk) begin
 			old_rd[0] <= rd[0];
 			old_wr[0] <= wr[0];
 			old_rfs[0] <= rfs[0];
-			a <= addr0;
-			ba <= bank0;
+			{ba, a} <= {bank0,addr0};
 			data <= din0;
 			we <= wr[0];
 			dqm <= wr[0] ? ~{wrh0,wrl0} : 2'b00;
@@ -133,8 +132,7 @@ always @(posedge clk) begin
 			old_rd[1] <= rd[1];
 			old_wr[1] <= wr[1];
 			old_rfs[1] <= rfs[1];
-			a <= addr1;
-			ba <= bank1;
+			{ba, a} <= {bank1,addr1};
 			data <= din1;
 			we <= wr[1];
 			dqm <= wr[1] ? ~{wrh1,wrl1} : 2'b00;
@@ -146,8 +144,7 @@ always @(posedge clk) begin
 			old_rd[2] <= rd[2];
 			old_wr[2] <= wr[2];
 			old_rfs[2] <= rfs[2];
-			a <= addr2;
-			ba <= bank2;
+			{ba, a} <= {bank2,addr2};
 			data <= din2;
 			we <= wr[2];
 			dqm <= wr[2] ? ~{wrh2,wrl2} : 2'b00;
