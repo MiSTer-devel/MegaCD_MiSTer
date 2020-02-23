@@ -611,25 +611,27 @@ always @(posedge MCLK) begin
 		mstate <= MBUS_IDLE;
 		NO_DATA <= 'h4E71;
 		RFS <= 0;
-		rfs_pend <= 0;
+		//rfs_pend <= 0;
 	end
 	else begin
+		/*
 		refresh_timer <= refresh_timer + 1'd1;
 		if (refresh_timer == 'h17F) begin
 			refresh_timer <= 0;
 			rfs_pend <= 1;
 		end
-		
+		*/
+
 		case(mstate)
 		MBUS_IDLE:
 			begin
 				msrc <= MSRC_NONE;
-				if (rfs_pend) begin
+				/*if (rfs_pend) begin
 					rfs_pend <= 0;
 					RFS <= 1;
 					mstate <= MBUS_REFRESH;
 				end
-				else if (!M68K_AS_N && (!M68K_LDS_N || !M68K_UDS_N) && M68K_MBUS_DTACK_N) begin
+				else*/ if (!M68K_AS_N && (!M68K_LDS_N || !M68K_UDS_N) && M68K_MBUS_DTACK_N) begin
 					msrc <= MSRC_M68K;
 					MBUS_A <= M68K_A[23:1];
 					MBUS_DO <= M68K_DO;

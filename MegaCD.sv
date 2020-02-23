@@ -226,6 +226,7 @@ localparam CONF_STR = {
 	"H2o4,Enable BGA,Yes,No;",//36
 	"H2o5,Enable BGB,Yes,No;",//37
 	"H2o6,Enable SPR,Yes,No;",//38
+	"H2o7,MCD RAM,Banks 2&3,Banks 0&1;",//39
 	"H2-;",
 	//"R1,Reset;"
 	"R0,Reset & Eject CD;",
@@ -245,7 +246,7 @@ wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire [15:0] ioctl_data;
 wire  [7:0] ioctl_index;
-//reg         ioctl_wait;
+reg         ioctl_wait;
 
 reg  [31:0] sd_lba;
 reg         sd_rd = 0;
@@ -291,7 +292,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_data),
-	//.ioctl_wait(ioctl_wait),
+	.ioctl_wait(ioctl_wait),
 
 	.sd_lba(sd_lba),
 	.sd_rd(sd_rd),
@@ -359,7 +360,6 @@ wire        GEN_RAM_CE_N;
 
 wire [15:0] GEN_MEM_DO;
 wire        GEN_MEM_BUSY;
-wire        GEN_RFS;
 
 wire [7:0] color_lut[16] = '{
 	8'd0,   8'd27,  8'd49,  8'd71,
@@ -382,6 +382,7 @@ wire EN_MCD_CDDA = ~status[26] | ~dbg_menu;
 wire EN_VDP_BGA  = ~status[36] | ~dbg_menu;
 wire EN_VDP_BGB  = ~status[37] | ~dbg_menu;
 wire EN_VDP_SPR  = ~status[38] | ~dbg_menu;
+wire MCD_BANK23  = ~status[39] | ~dbg_menu;
 
 gen gen
 (
@@ -453,10 +454,7 @@ gen gen
 	.OBJ_LIMIT_HIGH(status[31]),
 
 	.RAM_CE_N(GEN_RAM_CE_N),
-	.RAM_RDY(~GEN_MEM_BUSY),
-	
-	.RFS(GEN_RFS),
-	.RFS_RDY(~GEN_MEM_BUSY & rom_cart_mode)
+	.RAM_RDY(~GEN_MEM_BUSY)
 );
 
 assign GEN_VDI = !GEN_RAM_CE_N ? GEN_MEM_DO_R :
@@ -487,7 +485,6 @@ wire [15:0] MCD_PRG_DI;
 wire        MCD_PRG_OE_N;
 wire        MCD_PRG_WRL_N;
 wire        MCD_PRG_WRH_N;
-wire        MCD_PRG_RFS;
 wire        MCD_PRG_BUSY;
 
 wire [13:1] MCD_BRAM_ADDR;
@@ -524,7 +521,6 @@ MCD MCD
 	.PRG_WRL_N(MCD_PRG_WRL_N),
 	.PRG_WRH_N(MCD_PRG_WRH_N),
 	.PRG_OE_N(MCD_PRG_OE_N),
-	.PRG_RFS(MCD_PRG_RFS),
 	.PRG_RDY(~MCD_PRG_BUSY),
 	
 	.ROM_DI(GEN_MEM_DO),
@@ -616,6 +612,15 @@ CART CART
 	.RAM_RDY(~GEN_MEM_BUSY)
 );
 
+always @(posedge clk_sys) begin
+	reg old_busy;
+	
+	old_busy <= tmpram_busy;
+	if(rom_download & ioctl_wr) ioctl_wait <= 1;
+	if(old_busy & ~tmpram_busy) ioctl_wait <= 0;
+end
+ 
+
 //MCD PRGRAM, GEN ROM/RAM/CART RAM
 sdram sdram
 (
@@ -623,38 +628,35 @@ sdram sdram
 	.init(~locked),
 	.clk(clk_ram),
 	
-	.addr0({5'b00000,MCD_PRG_ADDR}),
-	.bank0(0),
+	//MCD: banks 2,3
+	.addr0({(MCD_BANK23 ? 6'b100000 : 6'b011110),MCD_PRG_ADDR}), // 1000000-107FFFF / 0F00000-0F7FFFF
 	.din0(MCD_PRG_DO),
 	.dout0(MCD_PRG_DI),
 	.rd0(~MCD_PRG_OE_N),
 	.wrl0(~MCD_PRG_WRL_N),
 	.wrh0(~MCD_PRG_WRH_N),
-	.rfs0(MCD_PRG_RFS),
 	.busy0(MCD_PRG_BUSY),
 	
-	.addr1(rom_download ? {1'b0,ioctl_addr[22:1]} : 									//ROM 000000-3FFFFF
-			 !GEN_RAM_CE_N ? {8'b10000000,GEN_VA[15:1]} : 								//WORK RAM 400000-40FFFF
-			 !CART_RAM_CE_N ? {4'b1110,GEN_VA[19:1]} : 									//CART RAM 600000-6FFFFF
-			 !CART_ROM_CE_N ? {2'b00,GEN_VA[21:1] & {rom_mask[22:13],12'hFFF}} :	//CART ROM 000000-3FFFFF
-			 {7'b0000000,GEN_VA[16:1]} ),														//BIOS ROM 000000-01FFFF
-	.bank1(1),
-	.din1(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : GEN_VDO),
+	//Genesis: banks 0,1
+	.addr1(!GEN_RAM_CE_N  ? {9'b010000000,GEN_VA[15:1]} : 							//WORK RAM 800000-80FFFF
+			 !CART_RAM_CE_N ? {5'b01110,GEN_VA[19:1]} : 									//CART RAM E00000-EFFFFF
+			 !CART_ROM_CE_N ? {2'b00,GEN_VA[22:1] & {rom_mask[22:13],12'hFFF}} : //CART ROM 000000-7FFFFF
+			                  {8'b00000000,GEN_VA[16:1]} ),								//BIOS ROM 000000-01FFFF
+	.din1(GEN_VDO),
 	.dout1(GEN_MEM_DO),
-	.rd1(rom_download ? 1'b0 : (~GEN_RAM_CE_N | ~GEN_ROM_CE_N | ~CART_RAM_CE_N | ~CART_ROM_CE_N) & ~GEN_OE_N),
-	.wrl1(rom_download ? ioctl_wr : (~GEN_RAM_CE_N | ~CART_RAM_CE_N) & ~GEN_WRL_N),
-	.wrh1(rom_download ? ioctl_wr : (~GEN_RAM_CE_N | ~CART_RAM_CE_N) & ~GEN_WRH_N),
-	.rfs1(GEN_RFS & rom_cart_mode),
+	.rd1((~GEN_RAM_CE_N | ~GEN_ROM_CE_N | ~CART_RAM_CE_N | ~CART_ROM_CE_N) & ~GEN_OE_N),
+	.wrl1((~GEN_RAM_CE_N | ~CART_RAM_CE_N) & ~GEN_WRL_N),
+	.wrh1((~GEN_RAM_CE_N | ~CART_RAM_CE_N) & ~GEN_WRH_N),
 	.busy1(GEN_MEM_BUSY),
-	
-	.addr2({4'b1110,tmpram_lba[9:0],tmpram_addr}), //CART RAM 600000-6FFFFF for sd_*
-	.bank2(1),
-	.din2({tmpram_dout,tmpram_dout}),
+
+	//Load/Save: banks 0,1
+	.addr2( rom_download ? {2'b00,ioctl_addr[22:1]} : 	                //ROM      000000-7FFFFF
+								  {5'b01110,tmpram_lba[9:0],tmpram_addr}),    //CART RAM E00000-EFFFFF for sd_*
+	.din2(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : {tmpram_dout,tmpram_dout}),
 	.dout2(tmpram_din),
-	.rd2(tmpram_req & ~bk_loading),
-	.wrl2(tmpram_req & bk_loading),
-	.wrh2(tmpram_req & bk_loading),
-	.rfs2(0),
+	.rd2(~rom_download & tmpram_req & ~bk_loading),
+	.wrl2(rom_download ? ioctl_wait : (tmpram_req & bk_loading)),
+	.wrh2(rom_download ? ioctl_wait : (tmpram_req & bk_loading)),
 	.busy2(tmpram_busy)
 );
 

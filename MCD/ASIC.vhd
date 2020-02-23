@@ -1311,10 +1311,10 @@ begin
 		elsif rising_edge(CLK) then
 			if EN = '1' then
 				PRG_RAM_RFS_TIMER <= PRG_RAM_RFS_TIMER + 1;
-				if PRG_RAM_RFS_TIMER = "0101111111" then		-- ~15us
-					PRG_RAM_RFS_TIMER <= (others => '0');
-					PRG_RAM_RFS_SCHED <= '1';
-				end if;
+--				if PRG_RAM_RFS_TIMER = "0101111111" then		-- ~15us
+--					PRG_RAM_RFS_TIMER <= (others => '0');
+--					PRG_RAM_RFS_SCHED <= '1';
+--				end if;
 				
 				case PRMS is
 					when PRS_IDLE =>
@@ -1335,11 +1335,11 @@ begin
 								PRG_RAM_WRH <= not EXT_UDS_N and not EXT_RNW;
 								PRG_RAM_RD <= EXT_RNW;
 								PRMS <= PRS_WAIT;
-							elsif (EXT_LDS_N = '0' or EXT_UDS_N = '0') and EXT_ASEL_N = '0' and RFS_PRGRAM_DTACK_N = '1' then
-								PRG_RAM_RFS <= '1';
-								RFS_PRGRAM_DTACK_N <= '0';
-								PRMS <= PRS_REFRESH_WAIT;
-								PRG_RAM_RFS_TIMER <= (others => '0');
+--							elsif (EXT_LDS_N = '0' or EXT_UDS_N = '0') and EXT_ASEL_N = '0' and RFS_PRGRAM_DTACK_N = '1' then
+--								PRG_RAM_RFS <= '1';
+--								RFS_PRGRAM_DTACK_N <= '0';
+--								PRMS <= PRS_REFRESH_WAIT;
+--								PRG_RAM_RFS_TIMER <= (others => '0');
 							end if;
 						end if;
 						
@@ -1399,10 +1399,11 @@ begin
 				
 				case PRSS is
 					when PRS_IDLE =>
-						if PRG_RAM_RFS_SCHED = '1' and SBRQ = '0' and SRES = '1' and HS = HS_EXEC then
-							PRG_RAM_RFS <= '1';
-							PRSS <= PRS_REFRESH_WAIT;
-						elsif DMA_PRG_RAM_SEL = '1' and SBRQ = '0' and SRES = '1' then
+--						if PRG_RAM_RFS_SCHED = '1' and SBRQ = '0' and SRES = '1' and HS = HS_EXEC then
+--							PRG_RAM_RFS <= '1';
+--							PRSS <= PRS_REFRESH_WAIT;
+--						els
+						if DMA_PRG_RAM_SEL = '1' and SBRQ = '0' and SRES = '1' then
 							PRG_RAM_ADDR <= DMA_ADDR;
 							PRG_RAM_DO <= DMA_DAT;
 							if DMA_ADDR(18 downto 9) >= "00"&WP then
@@ -1432,11 +1433,11 @@ begin
 								S68K_PRGRAM_DTACK_N <= '0';
 								PRSS <= PRS_END;
 							end if;
-						elsif (S68K_LDS_N = '0' or S68K_UDS_N = '0') and S68K_AS_N = '0' and RFS_PRGRAM_DTACK_N = '1' then
-							PRG_RAM_RFS <= '1';
-							RFS_PRGRAM_DTACK_N <= '0';
-							PRSS <= PRS_REFRESH_WAIT;
-							PRG_RAM_RFS_TIMER <= (others => '0');
+--						elsif (S68K_LDS_N = '0' or S68K_UDS_N = '0') and S68K_AS_N = '0' and RFS_PRGRAM_DTACK_N = '1' then
+--							PRG_RAM_RFS <= '1';
+--							RFS_PRGRAM_DTACK_N <= '0';
+--							PRSS <= PRS_REFRESH_WAIT;
+--							PRG_RAM_RFS_TIMER <= (others => '0');
 						end if;
 					
 					when PRS_WAIT =>
