@@ -98,7 +98,8 @@ module gen
 	input  [11:0] JOY_2,
 	input  [11:0] JOY_3,
 	input  [11:0] JOY_4,
-	input   [1:0] MULTITAP,
+	input  [11:0] JOY_5,
+	input   [2:0] MULTITAP,
 
 	input  [24:0] MOUSE,
 	input   [2:0] MOUSE_OPT,
@@ -454,10 +455,6 @@ reg         IO_SEL;
 wire  [7:0] IO_DO;
 wire        IO_DTACK_N;
 
-reg         JCART_SEL;
-wire [15:0] JCART_DO;
-wire        JCART_DTACK_N;
-
 multitap multitap
 (
 	.RESET(reset),
@@ -518,10 +515,23 @@ multitap multitap
 	.P4_Y(~JOY_4[10]),
 	.P4_Z(~JOY_4[11]),
 	
-	.DISK_N(DISK_N),
-	
+	.P5_UP(~JOY_5[3]),
+	.P5_DOWN(~JOY_5[2]),
+	.P5_LEFT(~JOY_5[1]),
+	.P5_RIGHT(~JOY_5[0]),
+	.P5_A(~JOY_5[4]),
+	.P5_B(~JOY_5[5]),
+	.P5_C(~JOY_5[6]),
+	.P5_START(~JOY_5[7]),
+	.P5_MODE(~JOY_5[8]),
+	.P5_X(~JOY_5[9]),
+	.P5_Y(~JOY_5[10]),
+	.P5_Z(~JOY_5[11]),
+
+	.DISK(~DISK_N),
+
 	.FOURWAY_EN(MULTITAP == 1),
-	.TEAMPLAYER_EN(MULTITAP == 2),
+	.TEAMPLAYER_EN({MULTITAP == 3,MULTITAP == 2}),
 
 	.MOUSE(MOUSE),
 	.MOUSE_OPT(MOUSE_OPT),
@@ -534,11 +544,7 @@ multitap multitap
 	.RNW(MBUS_RNW),
 	.DI(MBUS_DO[7:0]),
 	.DO(IO_DO),
-	.DTACK_N(IO_DTACK_N),
-
-	.JCART_SEL(JCART_SEL),
-	.JCART_DO(JCART_DO),
-	.JCART_DTACK_N(JCART_DTACK_N)
+	.DTACK_N(IO_DTACK_N)
 );
 
 //-----------------------------------------------------------------------

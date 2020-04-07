@@ -68,7 +68,7 @@ module gen_io
 	input            P2_Y,
 	input            P2_Z,
 
-	input            DISK_N,
+	input            DISK,
 
 	input     [24:0] MOUSE,
 	input      [2:0] MOUSE_OPT,
@@ -103,7 +103,7 @@ always @(posedge RESET or posedge CLK) begin
 			else begin
 				// Read
 				case(A)
-						0: DO <= {EXPORT, PAL, DISK_N, 5'd0};
+						0: DO <= {EXPORT, PAL, ~DISK, 5'd0};
 						1: DO <= (CTLA & DATA) | (~CTLA & (MOUSE_OPT[0] ? mdata : PAD1_DO));
 						2: DO <= (CTLB & DATB) | (~CTLB & (MOUSE_OPT[1] ? mdata : PAD2_DO));
 						3: DO <= R[3] & R[6]; // Unconnected port
