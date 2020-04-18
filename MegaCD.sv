@@ -309,11 +309,19 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	
 	.gamma_bus(gamma_bus),
 	
-	.cd_in(cd_in),
-	.cd_out(cd_out),
-
 	.ps2_key(ps2_key),
-	.ps2_mouse(ps2_mouse)
+	.ps2_mouse(ps2_mouse),
+
+	.EXT_BUS(EXT_BUS)
+);
+
+wire [34:0] EXT_BUS;
+hps_ext hps_ext
+(
+	.clk_sys(clk_sys),
+	.EXT_BUS(EXT_BUS),
+	.cd_in(cd_in),
+	.cd_out(cd_out)
 );
 
 reg dbg_menu = 0;

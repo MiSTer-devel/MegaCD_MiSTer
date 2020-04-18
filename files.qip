@@ -8,5 +8,6 @@ set_global_assignment -name VHDL_FILE mlab.vhd
 set_global_assignment -name VHDL_FILE CEGen.vhd
 set_global_assignment -name VHDL_FILE snd_mix.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE cofi.sv
+set_global_assignment -name VERILOG_FILE hps_ext.v
 set_global_assignment -name SDC_FILE MegaCD.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE MegaCD.sv
