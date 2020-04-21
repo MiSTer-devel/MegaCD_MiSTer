@@ -341,10 +341,10 @@ begin
 			RET1 <= '1';
 			DMNA0 <= '0';
 			DMNA1 <= '0';
-			RET_REQ <= '0';
-			RET_SET <= '0';
-			DMNA_REQ <= '0';
-			DMNA_SET <= '0';
+			--RET_REQ <= '0';
+			--RET_SET <= '0';
+			--DMNA_REQ <= '0';
+			--DMNA_SET <= '0';
 			
 			MODE <= '0';
 		elsif rising_edge(CLK) then
@@ -838,7 +838,7 @@ begin
 				end if;
 			
 				--CDD Status
-				OLD_IEN4 <= IEN(4);
+				--OLD_IEN4 <= IEN(4);
 				if INT_ACK(4) = '1' and INT_PEND(4) = '1' then
 					INT_PEND(4) <= '0';
 --				elsif IEN(4) = '0' and OLD_IEN4 = '1' and INT_PEND(4) = '1' then
@@ -1267,7 +1267,7 @@ begin
 				--CDC interrupt
 				if CLK_12M_F = '1' then
 					OLD_CDC_INT_N <= CDC_INT_N;
-					OLD_IEN5 <= IEN(5);
+					--OLD_IEN5 <= IEN(5);
 					if INT_ACK(5) = '1' and INT_PEND(5) = '1' then
 						INT_PEND(5) <= '0';
 					elsif CDC_INT_N = '0' and OLD_CDC_INT_N = '1' and INT_PEND(5) = '0' then

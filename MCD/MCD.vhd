@@ -217,13 +217,13 @@ begin
 		ROM_CE_N   		=> ROM_CE_N,
 		ROM_RDY   		=> ROM_RDY,
 		
-		PRAM_N  			=> PRAM_N,
+		--PRAM_N  			=> PRAM_N,
 		BRAM_N   		=> BRAM_N,
-		BROM_N   		=> BROM_N,
+		--BROM_N   		=> BROM_N,
 		CDC_N	  	 		=> CDC_N,
 		COE_N	  	 		=> COE_N,
 		CLWE_N   		=> CLWE_N,
-		CUWE_N   		=> CUWE_N,
+		--CUWE_N   		=> CUWE_N,
 		CDC_INT_N	   => CDC_INT_N,
 		ERES_N   		=> ERES_N,
 		

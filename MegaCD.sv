@@ -315,7 +315,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.EXT_BUS(EXT_BUS)
 );
 
-wire [34:0] EXT_BUS;
+wire [35:0] EXT_BUS;
 hps_ext hps_ext
 (
 	.clk_sys(clk_sys),
