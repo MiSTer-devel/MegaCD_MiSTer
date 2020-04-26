@@ -54,6 +54,14 @@ module multitap
 
 	input [24:0] MOUSE,
 	input  [2:0] MOUSE_OPT,
+	
+	input        GUN_OPT,
+	input        GUN_TYPE,
+	input        GUN_SENSOR,
+	input        GUN_A,
+	input        GUN_B,
+	input        GUN_C,
+	input        GUN_START,
 
 	input        PAL,
 	input        EXPORT,
@@ -63,7 +71,8 @@ module multitap
 	input        RNW,
 	input  [7:0] DI,
 	output [7:0] DO,
-	output       DTACK_N
+	output       DTACK_N,
+	output       HL
 );
 
 wire [7:0] GEN_DO;

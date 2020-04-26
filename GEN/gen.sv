@@ -104,6 +104,14 @@ module gen
 	input  [24:0] MOUSE,
 	input   [2:0] MOUSE_OPT,
 	
+	input         GUN_OPT,
+	input         GUN_TYPE,
+	input         GUN_SENSOR,
+	input         GUN_A,
+	input         GUN_B,
+	input         GUN_C,
+	input         GUN_START,
+	
 	output        RAM_CE_N,
 	input         RAM_RDY,
 	
@@ -192,6 +200,7 @@ always @(posedge MCLK) begin
 		if((~old_as & M68K_AS_N) || &scnt) begin
 			if (M68K_VINT) M68K_IPL_N <= 3'b001;
 			else if (M68K_HINT) M68K_IPL_N <= 3'b011;
+			else if (M68K_EXINT) M68K_IPL_N <= 3'b101;
 			else M68K_IPL_N <= 3'b111;
 		end
 	end
@@ -288,6 +297,7 @@ wire        VDP_DTACK_N;
 wire [23:1] VBUS_A;
 wire        VBUS_SEL;
 
+wire        M68K_EXINT;
 wire        M68K_HINT;
 wire        M68K_VINT;
 wire        Z80_VINT;
@@ -368,6 +378,8 @@ wire VDP_hs, VDP_vs;
 assign HS = ~VDP_hs;
 assign VS = ~VDP_vs;
 
+wire HL;
+
 vdp vdp
 (
 	.RST_n(~reset),
@@ -393,6 +405,9 @@ vdp vdp
 	.VRAM32_ack(vram32_ack),
 	.VRAM32_a(vram32_a),
 	.VRAM32_q(vram32_q),
+	
+	.EXINT(M68K_EXINT),
+	.HL(HL),
 	
 	.HINT(M68K_HINT),
 	.VINT_TG68(M68K_VINT),
@@ -535,6 +550,14 @@ multitap multitap
 
 	.MOUSE(MOUSE),
 	.MOUSE_OPT(MOUSE_OPT),
+	
+	.GUN_OPT(GUN_OPT),
+	.GUN_TYPE(GUN_TYPE),
+	.GUN_SENSOR(GUN_SENSOR),
+	.GUN_A(GUN_A),
+	.GUN_B(GUN_B),
+	.GUN_C(GUN_C),
+	.GUN_START(GUN_START),
 
 	.PAL(PAL),
 	.EXPORT(EXPORT),
@@ -544,7 +567,8 @@ multitap multitap
 	.RNW(MBUS_RNW),
 	.DI(MBUS_DO[7:0]),
 	.DO(IO_DO),
-	.DTACK_N(IO_DTACK_N)
+	.DTACK_N(IO_DTACK_N),
+	.HL(HL)
 );
 
 //-----------------------------------------------------------------------

@@ -219,6 +219,11 @@ localparam CONF_STR = {
 	"OIJ,Mouse,None,Port1,Port2;",
 	"OK,Mouse Flip Y,No,Yes;",
 	"-;",
+	"o89,Gun,Disabled,Joy1,Joy2,Mouse;",
+	"H4oA,Gun Btn,Joy,Mouse;",
+	"H4oBC,Cross,Small,Med,Big,None;",
+	"H4oD,Gun Type,Justifier,Menacer;",
+	"-;",
 	"H2OB,Enable FM,Yes,No;",//11
 	"H2OC,Enable PSG,Yes,No;",//12
 	"H2OP,Enable PCM,Yes,No;",//25
@@ -237,10 +242,11 @@ localparam CONF_STR = {
 };
 
 
-wire [15:0] status_menumask = {1'b1,~dbg_menu,1'b0,~bk_ena};
+wire [15:0] status_menumask = {!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
 wire  [1:0] buttons;
 wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
+wire  [7:0] joy0_x,joy0_y,joy1_x,joy1_y;
 wire        ioctl_download;
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
@@ -266,6 +272,9 @@ wire [24:0] ps2_mouse;
 
 wire [21:0] gamma_bus;
 
+wire [1:0] gun_mode = status[41:40];
+wire       gun_btn_mode = status[42];
+wire       gun_type = ~status[45];
 
 hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 (
@@ -279,6 +288,8 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.joystick_2(joystick_2),
 	.joystick_3(joystick_3),
 	.joystick_4(joystick_4),
+	.joystick_analog_0({joy0_y, joy0_x}),
+	.joystick_analog_1({joy1_y, joy1_x}),
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
 	.new_vmode(new_vmode),
@@ -454,6 +465,14 @@ gen gen
 
 	.MOUSE(ps2_mouse),
 	.MOUSE_OPT(status[20:18]),
+
+	.GUN_OPT(|gun_mode),
+	.GUN_TYPE(gun_type),
+	.GUN_SENSOR(lg_sensor),
+	.GUN_A(lg_a),
+	.GUN_B(lg_b),
+	.GUN_C(lg_c),
+	.GUN_START(lg_start),
 
 	.ENABLE_FM(EN_GEN_FM),
 	.ENABLE_PSG(EN_GEN_PSG),
@@ -926,9 +945,9 @@ video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 	.mono(0),
 
-	.R(red),
-	.G(green),
-	.B(blue),
+	.R((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[0]}} : red),
+	.G((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[1]}} : green),
+	.B((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[2]}} : blue),
 
 	// Positive pulses.
 	.HSync(hs_c),
@@ -937,6 +956,43 @@ video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	.VBlank(vblank_c)
 );
 
+wire [2:0] lg_target;
+wire       lg_sensor;
+wire       lg_a;
+wire       lg_b;
+wire       lg_c;
+wire       lg_start;
+
+lightgun lightgun
+(
+	.CLK(clk_sys),
+	.RESET(reset),
+
+	.MOUSE(ps2_mouse),
+	.MOUSE_XY(&gun_mode),
+
+	.JOY_X(gun_mode[0] ? joy0_x : joy1_x),
+	.JOY_Y(gun_mode[0] ? joy0_y : joy1_y),
+	.JOY(gun_mode[0] ? joystick_0 : joystick_1),
+
+	.RELOAD(gun_type),
+
+	.HDE(~hblank_c),
+	.VDE(~vblank_c),
+	.CE_PIX(ce_pix),
+	.H40(res[0]),
+
+	.BTN_MODE(gun_btn_mode),
+	.SIZE(status[44:43]),
+	.SENSOR_DELAY(gun_type ? 8'd32 : 8'd64),
+
+	.TARGET(lg_target),
+	.SENSOR(lg_sensor),
+	.BTN_A(lg_a),
+	.BTN_B(lg_b),
+	.BTN_C(lg_c),
+	.BTN_START(lg_start)
+);
 
 reg  [1:0] region_req;
 reg        region_set = 0;
@@ -1097,6 +1153,5 @@ always @(posedge clk_sys) begin
 		endcase
 	end
 end
-
 
 endmodule
