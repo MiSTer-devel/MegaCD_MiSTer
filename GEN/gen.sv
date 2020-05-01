@@ -111,6 +111,11 @@ module gen
 	input         GUN_B,
 	input         GUN_C,
 	input         GUN_START,
+
+	input   [7:0] SERJOYSTICK,
+	output  [7:0] SERJOYSTICKOUT,
+	output  [7:0] SERCTL,
+	input   [1:0] SER_OPT,
 	
 	output        RAM_CE_N,
 	input         RAM_RDY,
@@ -558,6 +563,11 @@ multitap multitap
 	.GUN_B(GUN_B),
 	.GUN_C(GUN_C),
 	.GUN_START(GUN_START),
+
+	.SERJOYSTICK(SERJOYSTICK),
+	.SERJOYSTICKOUT(SERJOYSTICKOUT),
+	.SERCTL(SERCTL),
+	.SER_OPT(SER_OPT),
 
 	.PAL(PAL),
 	.EXPORT(EXPORT),
