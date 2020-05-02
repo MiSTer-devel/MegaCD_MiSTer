@@ -112,9 +112,8 @@ module gen
 	input         GUN_C,
 	input         GUN_START,
 
-	input   [7:0] SERJOYSTICK,
-	output  [7:0] SERJOYSTICKOUT,
-	output  [7:0] SERCTL,
+	input   [7:0] SERJOYSTICK_IN,
+	output  [7:0] SERJOYSTICK_OUT,
 	input   [1:0] SER_OPT,
 	
 	output        RAM_CE_N,
@@ -124,7 +123,8 @@ module gen
 	input         RFS_RDY,
 	
 	output [23:0] DBG_M68K_A,
-	output [23:0] DBG_MBUS_A
+	output [23:0] DBG_MBUS_A,
+	output        TRANSP_DETECT
 );
 
 reg reset;
@@ -450,7 +450,9 @@ vdp vdp
 	.VS(VDP_vs),
 	.CE_PIX(CE_PIX),
 	.HBL(HBL),
-	.VBL(VBL)
+	.VBL(VBL),
+
+	.TRANSP_DETECT(TRANSP_DETECT)
 );
 
 // PSG 0x10-0x17 in VDP space
@@ -564,9 +566,8 @@ multitap multitap
 	.GUN_C(GUN_C),
 	.GUN_START(GUN_START),
 
-	.SERJOYSTICK(SERJOYSTICK),
-	.SERJOYSTICKOUT(SERJOYSTICKOUT),
-	.SERCTL(SERCTL),
+	.SERJOYSTICK_IN(SERJOYSTICK_IN),
+	.SERJOYSTICK_OUT(SERJOYSTICK_OUT),
 	.SER_OPT(SER_OPT),
 
 	.PAL(PAL),

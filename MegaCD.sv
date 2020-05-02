@@ -116,7 +116,7 @@ module emu
 	// Open-drain User port.
 	// 0 - D+/RX
 	// 1 - D-/TX
-	// 2..5 - USR1..USR4
+	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
 	input   [6:0] USER_IN,
 	output  [6:0] USER_OUT,
@@ -125,7 +125,6 @@ module emu
 );
 
 assign ADC_BUS  = 'Z;
-//assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign BUTTONS   = {bk_reload, 1'b0};
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
@@ -206,7 +205,7 @@ localparam CONF_STR = {
 	"OU,320x224 Aspect,Original,Corrected;",
 	"o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"OT,Border,No,Yes;",
-	"O9,Composite Blending,Off,On;",
+	"oFG,Composite Blend,Off,On,Adaptive;",
 	"OV,Sprite Limit,Normal,High;",
 	"-;",
 	"OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
@@ -218,11 +217,11 @@ localparam CONF_STR = {
 	"OLM,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2;",
 	"OIJ,Mouse,None,Port1,Port2;",
 	"OK,Mouse Flip Y,No,Yes;",
-	"oE,Serial Mode,OFF,SNAC;",
+	"oE,Serial,OFF,SNAC;",
 	"-;",
-	"o89,Gun,Disabled,Joy1,Joy2,Mouse;",
-	"H4oA,Gun Btn,Joy,Mouse;",
-	"H4oBC,Cross,Small,Med,Big,None;",
+	"o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
+	"H4oA,Gun Fire,Joy,Mouse;",
+	"H4oBC,Cross,Small,Medium,Big,None;",
 	"H4oD,Gun Type,Justifier,Menacer;",
 	"-;",
 	"H2OB,Enable FM,Yes,No;",//11
@@ -475,9 +474,8 @@ gen gen
 	.GUN_C(lg_c),
 	.GUN_START(lg_start),
 
-	.SERJOYSTICK(SERJOYSTICK),
-	.SERJOYSTICKOUT(SERJOYSTICKOUT),
-	.SERCTL(SERCTL),
+	.SERJOYSTICK_IN(SERJOYSTICK_IN),
+	.SERJOYSTICK_OUT(SERJOYSTICK_OUT),
 	.SER_OPT(SER_OPT),
 
 	.ENABLE_FM(EN_GEN_FM),
@@ -489,8 +487,13 @@ gen gen
 	.OBJ_LIMIT_HIGH(status[31]),
 
 	.RAM_CE_N(GEN_RAM_CE_N),
-	.RAM_RDY(~GEN_MEM_BUSY)
+	.RAM_RDY(~GEN_MEM_BUSY),
+
+	.TRANSP_DETECT(TRANSP_DETECT)
 );
+
+wire TRANSP_DETECT;
+wire cofi_enable = status[47] || (status[48] && TRANSP_DETECT);
 
 assign GEN_VDI = !GEN_RAM_CE_N ? GEN_MEM_DO_R :
 					  !CART_DTACK_N ? CART_DO :
@@ -916,7 +919,7 @@ wire [7:0] red, green, blue;
 cofi coffee (
 	.clk(clk_sys),
 	.pix_ce(ce_pix),
-	.enable(status[9]),
+	.enable(cofi_enable),
 
 	.hblank(hblank),
 	.vblank(vblank),
@@ -1160,37 +1163,33 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire [7:0] SERJOYSTICK;
-wire [7:0] SERJOYSTICKOUT;
-wire [7:0] SERCTL;
+wire [7:0] SERJOYSTICK_IN;
+wire [7:0] SERJOYSTICK_OUT;
 wire [1:0] SER_OPT;
 
 always @(posedge clk_sys) begin
 	if (status[46]) begin
-		SERJOYSTICK[0] <= USER_IN[1];//up
-		SERJOYSTICK[1] <= USER_IN[0];//down	
-		SERJOYSTICK[2] <= USER_IN[5];//left	
-		SERJOYSTICK[3] <= USER_IN[3];//right
-		SERJOYSTICK[4] <= USER_IN[2];//b TL		
-		SERJOYSTICK[5] <= USER_IN[6];//c TR GPIO7			
-		SERJOYSTICK[6] <= USER_IN[4];//  TH
-		SERJOYSTICK[7] <= 0;
+		SERJOYSTICK_IN[0] <= USER_IN[1];//up
+		SERJOYSTICK_IN[1] <= USER_IN[0];//down	
+		SERJOYSTICK_IN[2] <= USER_IN[5];//left	
+		SERJOYSTICK_IN[3] <= USER_IN[3];//right
+		SERJOYSTICK_IN[4] <= USER_IN[2];//b TL		
+		SERJOYSTICK_IN[5] <= USER_IN[6];//c TR GPIO7			
+		SERJOYSTICK_IN[6] <= USER_IN[4];//  TH
+		SERJOYSTICK_IN[7] <= 0;
 		SER_OPT[0] <= status[4];
 		SER_OPT[1] <= ~status[4];
-		USER_OUT[1] <= SERCTL[0] ? SERJOYSTICKOUT[0] : 1'b1;
-		USER_OUT[0] <= SERCTL[1] ? SERJOYSTICKOUT[1] : 1'b1;
-		USER_OUT[5] <= SERCTL[2] ? SERJOYSTICKOUT[2] : 1'b1;
-		USER_OUT[3] <= SERCTL[3] ? SERJOYSTICKOUT[3] : 1'b1;
-		USER_OUT[2] <= SERCTL[4] ? SERJOYSTICKOUT[4] : 1'b1;
-		USER_OUT[6] <= SERCTL[5] ? SERJOYSTICKOUT[5] : 1'b1;
-		USER_OUT[4] <= SERCTL[6] ? SERJOYSTICKOUT[6] : 1'b1;
-		
-		
+		USER_OUT[1] <= SERJOYSTICK_OUT[0];
+		USER_OUT[0] <= SERJOYSTICK_OUT[1];
+		USER_OUT[5] <= SERJOYSTICK_OUT[2];
+		USER_OUT[3] <= SERJOYSTICK_OUT[3];
+		USER_OUT[2] <= SERJOYSTICK_OUT[4];
+		USER_OUT[6] <= SERJOYSTICK_OUT[5];
+		USER_OUT[4] <= SERJOYSTICK_OUT[6];
 	end else begin
 		SER_OPT  <= 0;
 		USER_OUT <= '1;
 	end
 end
-
 
 endmodule
