@@ -193,9 +193,9 @@ localparam CONF_STR = {
 	"H2F4,BINGENMD ,Load Cart;",
 	"O67,Region,JP,US,EU;",
 	"-;",
-//	"C,Cheats;",
-//	"H1OO,Cheats Enabled,Yes,No;",
-//	"-;",
+	"C,Cheats;",
+	"H5OO,Cheats Enabled,Yes,No;",
+	"-;",
 	"O3,Backup RAM,Internal,Internal+Cart;",
 	"D0RG,Reload Backup RAM;",
 	"D0RH,Save Backup RAM;",
@@ -242,7 +242,7 @@ localparam CONF_STR = {
 };
 
 
-wire [15:0] status_menumask = {!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
+wire [15:0] status_menumask = {~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
 wire  [1:0] buttons;
 wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
@@ -359,10 +359,43 @@ wire cdc_dat_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 wire cdc_sub_download = ioctl_download & (ioctl_index[5:0] == 6'h03);
 wire cart_download = ioctl_download & (ioctl_index[5:0] == 6'h04);
 wire save_download = ioctl_download & (ioctl_index[5:0] == 6'h05);
+wire code_download = ioctl_download & &ioctl_index;
 
 wire rom_download = bios_download | cart_download;
 
 wire reset = RESET | status[0] | buttons[1] | region_set;
+
+///////////////////////////////////////////////////
+// Code loading for WIDE IO (16 bit)
+reg [128:0] gg_code;
+wire        gg_available = gg_available1 | gg_available2;
+
+// Code layout:
+// {clock bit, code flags,     32'b address, 32'b compare, 32'b replace}
+//  128        127:96          95:64         63:32         31:0
+// Integer values are in BIG endian byte order, so it up to the loader
+// or generator of the code to re-arrange them correctly.
+
+always_ff @(posedge clk_sys) begin
+	gg_code[128] <= 0;
+
+	if (code_download & ioctl_wr) begin
+		case (ioctl_addr[3:0])
+			0:  gg_code[111:96]  <= ioctl_data; // Flags Bottom Word
+			2:  gg_code[127:112] <= ioctl_data; // Flags Top Word
+			4:  gg_code[79:64]   <= ioctl_data; // Address Bottom Word
+			6:  gg_code[95:80]   <= ioctl_data; // Address Top Word
+			8:  gg_code[47:32]   <= ioctl_data; // Compare Bottom Word
+			10: gg_code[63:48]   <= ioctl_data; // Compare top Word
+			12: gg_code[15:0]    <= ioctl_data; // Replace Bottom Word
+			14: begin
+				 gg_code[31:16]   <= ioctl_data; // Replace Top Word
+				 gg_code[128]     <= 1;      // Clock it in
+			end
+		endcase
+	end
+end
+
 
 //Genesis
 wire [23:1] GEN_VA;
@@ -403,6 +436,8 @@ wire EN_VDP_BGA  = ~status[36] | ~dbg_menu;
 wire EN_VDP_BGB  = ~status[37] | ~dbg_menu;
 wire EN_VDP_SPR  = ~status[38] | ~dbg_menu;
 wire MCD_BANK23  = ~status[39] | ~dbg_menu;
+
+wire gg_available1;
 
 gen gen
 (
@@ -489,7 +524,12 @@ gen gen
 	.RAM_CE_N(GEN_RAM_CE_N),
 	.RAM_RDY(~GEN_MEM_BUSY),
 
-	.TRANSP_DETECT(TRANSP_DETECT)
+	.TRANSP_DETECT(TRANSP_DETECT),
+
+	.GG_RESET(code_download && ioctl_wr && !ioctl_addr),
+	.GG_EN(status[24]),
+	.GG_CODE({~gg_code[95] & gg_code[128], gg_code[127:0]}),
+	.GG_AVAILABLE(gg_available1)
 );
 
 wire TRANSP_DETECT;
@@ -532,6 +572,8 @@ wire        MCD_BRAM_WE;
 
 wire        MCD_LED_RED;
 wire        MCD_LED_GREEN;
+
+wire        gg_available2;
 
 MCD MCD
 (
@@ -586,7 +628,12 @@ MCD MCD
 	.CDDA_SR(MCD_CDDA_SR),
 	
 	.LED_RED(MCD_LED_RED),
-	.LED_GREEN(MCD_LED_GREEN)
+	.LED_GREEN(MCD_LED_GREEN),
+
+	.GG_RESET(code_download && ioctl_wr && !ioctl_addr),
+	.GG_EN(status[24]),
+	.GG_CODE({gg_code[95] & gg_code[128], gg_code[127:0]}),
+	.GG_AVAILABLE(gg_available2)
 );
 
 wire [15:0] MCD_SL;

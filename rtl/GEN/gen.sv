@@ -115,13 +115,18 @@ module gen
 	input   [7:0] SERJOYSTICK_IN,
 	output  [7:0] SERJOYSTICK_OUT,
 	input   [1:0] SER_OPT,
-	
+
 	output        RAM_CE_N,
 	input         RAM_RDY,
-	
+
 	output        RFS,
 	input         RFS_RDY,
-	
+
+	input         GG_RESET,
+	input         GG_EN,
+	input [128:0] GG_CODE,
+	output        GG_AVAILABLE,
+
 	output [23:0] DBG_M68K_A,
 	output [23:0] DBG_MBUS_A,
 	output        TRANSP_DETECT
@@ -242,9 +247,24 @@ fx68k M68K
 	.IPL0n(M68K_IPL_N[0]),
 	.IPL1n(M68K_IPL_N[1]),
 	.IPL2n(M68K_IPL_N[2]),
-	.iEdb(MBUS_DI),
+	.iEdb(genie_ovr ? genie_data : MBUS_DI),
 	.oEdb(M68K_DO),
 	.eab(M68K_A)
+);
+
+wire genie_ovr;
+wire [15:0] genie_data;
+
+CODES #(.ADDR_WIDTH(24), .DATA_WIDTH(16)) codes (
+	.clk(MCLK),
+	.reset(GG_RESET),
+	.enable(~GG_EN),
+	.addr_in({M68K_A[23:1], 1'b0}),
+	.data_in(MBUS_DI),
+	.code(GG_CODE),
+	.available(GG_AVAILABLE),
+	.genie_ovr(genie_ovr),
+	.genie_data(genie_data)
 );
 
 //--------------------------------------------------------------
