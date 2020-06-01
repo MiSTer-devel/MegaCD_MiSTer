@@ -190,7 +190,6 @@ localparam CONF_STR = {
 	"O2,Reset on insertion,Yes,No;",
 	"-;",
 	"F1,BINGENMD ,Load BIOS;",
-	"H2F4,BINGENMD ,Load Cart;",
 	"O67,Region,JP,US,EU;",
 	"-;",
 	"C,Cheats;",
@@ -354,14 +353,11 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire bios_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
+wire rom_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
 wire cdc_dat_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 wire cdc_sub_download = ioctl_download & (ioctl_index[5:0] == 6'h03);
-wire cart_download = ioctl_download & (ioctl_index[5:0] == 6'h04);
 wire save_download = ioctl_download & (ioctl_index[5:0] == 6'h05);
 wire code_download = ioctl_download & &ioctl_index;
-
-wire rom_download = bios_download | cart_download;
 
 wire reset = RESET | status[0] | buttons[1] | region_set;
 
@@ -410,6 +406,7 @@ wire        GEN_CE0_N;
 wire        GEN_WRL_N, GEN_WRH_N, GEN_OE_N;
 wire        GEN_ROM_CE_N;
 wire        GEN_RAM_CE_N;
+wire        GEN_PAGE_CE_N;
 
 wire [15:0] GEN_MEM_DO;
 wire        GEN_MEM_BUSY;
@@ -464,6 +461,9 @@ gen gen
 	.WRH_N(GEN_WRH_N),
 	.OE_N(GEN_OE_N),
 	
+	.TIME_N(GEN_PAGE_CE_N),
+	.TIME_DI(GEN_PAGE_DI),
+
 	.EXT_SL(MCD_SL),
 	.EXT_SR(MCD_SR),
 
@@ -689,7 +689,7 @@ CART CART
 	.CART_N(CART_CART_N),
 	
 	.ROM_CE_N(CART_ROM_CE_N),
-	.ROM_DI(GEN_MEM_DO),
+	.ROM_DI(PIER_HOOK ? PIER_DATA : GEN_MEM_DO),
 	.ROM_RDY(~GEN_MEM_BUSY),
 	
 	.RAM_CE_N(CART_RAM_CE_N),
@@ -723,10 +723,10 @@ sdram sdram
 	.busy0(MCD_PRG_BUSY),
 	
 	//Genesis: banks 0,1
-	.addr1(!GEN_RAM_CE_N  ? {9'b010000000,GEN_VA[15:1]} : 							//WORK RAM 800000-80FFFF
-			 !CART_RAM_CE_N ? {5'b01110,GEN_VA[19:1]} : 									//CART RAM E00000-EFFFFF
-			 !CART_ROM_CE_N ? {2'b00,GEN_VA[22:1] & {rom_mask[22:13],12'hFFF}} : //CART ROM 000000-7FFFFF
-			                  {8'b00000000,GEN_VA[16:1]} ),								//BIOS ROM 000000-01FFFF
+	.addr1(!GEN_RAM_CE_N  ? {9'b010000000,GEN_VA[15:1]} : //WORK RAM 800000-80FFFF
+			 !CART_RAM_CE_N ? {5'b01110,GEN_VA[19:1]}     : //CART RAM E00000-EFFFFF
+			 !CART_ROM_CE_N ? {2'b00,ROM_VA[22:1]}        : //CART ROM 000000-7FFFFF
+			                  {8'b01111000,GEN_VA[16:1]} ),	//BIOS ROM F00000-F1FFFF
 	.din1(GEN_VDO),
 	.dout1(GEN_MEM_DO),
 	.rd1((~GEN_RAM_CE_N | ~GEN_ROM_CE_N | ~CART_RAM_CE_N | ~CART_ROM_CE_N) & ~GEN_OE_N),
@@ -735,7 +735,7 @@ sdram sdram
 	.busy1(GEN_MEM_BUSY),
 
 	//Load/Save: banks 0,1
-	.addr2( rom_download ? {2'b00,ioctl_addr[22:1]} : 	                //ROM      000000-7FFFFF
+	.addr2( rom_download ? (rom_cart_mode ? {2'b00,ioctl_addr[22:1]} : {5'b01111,ioctl_addr[19:1]}) : //ROM  000000-7FFFFF/F00000-FFFFFF
 								  {5'b01110,tmpram_lba[9:0],tmpram_addr}),    //CART RAM E00000-EFFFFF for sd_*
 	.din2(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : {tmpram_dout,tmpram_dout}),
 	.dout2(tmpram_din),
@@ -745,13 +745,14 @@ sdram sdram
 	.busy2(tmpram_busy)
 );
 
+
 wire [15:0] bram_sd_buff_data;
 dpram_dif #(13,8,12,16) bram
 (
 	.clock(clk_sys),
-	.address_a(MCD_BRAM_ADDR),
-	.data_a(MCD_BRAM_DO),
-	.wren_a(MCD_BRAM_WE),
+	.address_a(PIER_QUIRK ? m95_addr : MCD_BRAM_ADDR),
+	.data_a(PIER_QUIRK ? m95_di : MCD_BRAM_DO),
+	.wren_a(PIER_QUIRK ? m95_we : MCD_BRAM_WE),
 	.q_a(MCD_BRAM_DI),
 
 	.address_b({sd_lba[3:0],sd_buff_addr}),
@@ -808,63 +809,6 @@ always @(posedge clk_sys) begin
 	end
 end
 
-//DDR3
-//wire [24:1] rom_addr;
-//wire [15:0] rom_data;
-//wire rom_rd, rom_rdack, rom_wrack; 
-//reg  rom_wr;
-//
-//ddram ddram
-//(
-//	.*,
-//	
-//	.wraddr(cart_download ? ioctl_addr : rom_sz),
-//	.din({ioctl_data[7:0],ioctl_data[15:8]}),
-//	.we_req(rom_wr),
-//	.we_ack(rom_wrack),
-//	
-//	.rdaddr(rom_addr),
-//	.dout(rom_data),
-//	.rd_req(rom_rd),
-//	.rd_ack(rom_rdack),
-//	
-//	.rdaddr2(0),
-//	.dout2(),
-//	.rd_req2(0),
-//	.rd_ack2() 
-//);
-//assign DDRAM_CLK = clk_ram;
-
-//reg [24:0]  rom_sz;
-reg [23:13] rom_mask;
-reg         rom_cart_mode;
-always @(posedge clk_sys) begin
-//	reg old_download, old_reset;
-//	old_download <= rom_download;
-//	old_reset <= reset;
-
-//	if(~old_reset && reset) ioctl_wait <= 0;
-//	if (old_download & ~rom_download) begin
-//		rom_sz <= ioctl_addr[24:0];
-//		ioctl_wait <= 0;
-//	end
-//
-//	if(~old_download && cart_download)
-//		rom_wr <= 0;
-//	else if (cart_download) begin
-//		if(ioctl_wr) begin
-//			ioctl_wait <= 1;
-//			rom_wr <= ~rom_wr;
-//		end else if(ioctl_wait && (rom_wr == rom_wrack)) begin
-//			ioctl_wait <= 0;
-//		end
-//	end
-	
-	if (rom_download & ioctl_wr) begin
-		rom_cart_mode <= ioctl_index[2];
-		rom_mask <= ioctl_addr[23:13];
-	end
-end
 
 //CD communication
 reg [48:0] cd_in;
@@ -1100,7 +1044,7 @@ end
 /////////////////////////  BRAM SAVE/LOAD  /////////////////////////////
 
 wire downloading = save_download;
-wire bk_change  = MCD_BRAM_WE | (CART_EN & ~CART_RAM_CE_N & (~GEN_WRL_N | ~GEN_WRH_N));
+wire bk_change  = MCD_BRAM_WE | m95_we | (CART_EN & ~CART_RAM_CE_N & (~GEN_WRL_N | ~GEN_WRH_N));
 wire autosave   = status[13];
 wire bk_load    = status[16];
 wire bk_save    = status[17];
@@ -1236,6 +1180,128 @@ always @(posedge clk_sys) begin
 	end else begin
 		SER_OPT  <= 0;
 		USER_OUT <= '1;
+	end
+end
+
+
+///////////////////////////////////////////////
+
+reg         ep_si, m95_so, ep_sck, ep_hold, ep_cs;
+wire  [7:0] m95_di, m95_q;
+wire [11:0] m95_addr;
+wire        m95_we;
+
+STM95XXX pier_eeprom
+(
+	.clk(clk_sys),
+	.enable(PIER_QUIRK),
+	.so(m95_so),
+	.si(ep_si),
+	.sck(ep_sck),
+	.hold_n(ep_hold),
+	.cs_n(ep_cs),
+	.wp_n(1'b1),
+	.ram_addr(m95_addr),
+	.ram_q(MCD_BRAM_DI),
+	.ram_di(m95_di),
+	.ram_we(m95_we)
+);
+
+reg  [15:0] GEN_PAGE_DI;
+reg   [4:0] BANK_REG[8];
+wire [23:1] ROM_VA = {BANK_REG[GEN_VA[21:19]], GEN_VA[18:1]} & {rom_mask,12'hFFF};
+
+// MAPPERS
+always @(posedge clk_sys) begin
+	reg old_ce;
+
+	old_ce <= GEN_PAGE_CE_N;
+
+	if (reset | rom_download) begin
+		BANK_REG <= '{0,1,2,3,4,5,6,7};
+	end
+	else if(old_ce && ~GEN_PAGE_CE_N) begin
+		GEN_PAGE_DI <= '1;
+		if(PIER_QUIRK) begin
+			if (GEN_RNW) begin
+				if (GEN_VA[3:1] == 'h5) begin
+					GEN_PAGE_DI[0] <= m95_so;
+				end
+			end
+			else if (GEN_VA[3:1]) begin
+				if (GEN_VA[3:1] == 4) begin // Pier EEPROM
+					{ep_cs, ep_hold, ep_sck, ep_si} <= GEN_VDO[3:0];
+				end
+				else if (~GEN_VA[3]) begin // Pier Banks
+					BANK_REG[{1'b1, GEN_VA[2:1]}] <= GEN_VDO[3:0];
+				end
+			end
+		end
+		else if (rom_mask[23:22]) begin // >4MB
+			if (~GEN_RNW && GEN_VA[3:1]) begin
+				BANK_REG[GEN_VA[3:1]] <= GEN_VDO[4:0];
+			end
+		end
+	end
+end
+
+reg [15:0] PIER_DATA;
+reg        PIER_HOOK;
+
+always @(posedge clk_sys) begin
+	reg       old_sel;
+	reg [3:0] pier_count;
+
+	old_sel <= GEN_ASEL_N;
+	if (reset | rom_download) begin
+		pier_count <= 0;
+		PIER_HOOK <= 0;
+	end
+	else if(PIER_QUIRK & old_sel & ~GEN_ASEL_N) begin
+		PIER_HOOK <= 0;
+		if ({GEN_VA,1'b0} == 'h0015E6 || {GEN_VA,1'b0} == 'h0015E8) begin
+			if (pier_count < 'h6) begin
+				pier_count <= pier_count + 1'h1;
+				PIER_DATA <= GEN_VA[1] ? 16'h0000 : 16'h0010;
+			end
+			else begin
+				PIER_DATA <= GEN_VA[1] ? 16'h0001 : 16'h8010;
+			end
+			PIER_HOOK <= 1;
+		end
+	end
+end
+
+reg PIER_QUIRK = 0;
+always @(posedge clk_sys) begin
+	reg [63:0] cart_id;
+	reg old_download;
+
+	old_download <= rom_download;
+	if(~old_download && rom_download) {PIER_QUIRK} <= 0;
+
+	if(ioctl_wr & rom_download & ioctl_index[6]) begin
+		if(ioctl_addr == 'h182) cart_id[63:56] <= ioctl_data[15:8];
+		if(ioctl_addr == 'h184) cart_id[55:40] <= {ioctl_data[7:0],ioctl_data[15:8]};
+		if(ioctl_addr == 'h186) cart_id[39:24] <= {ioctl_data[7:0],ioctl_data[15:8]};
+		if(ioctl_addr == 'h188) cart_id[23:08] <= {ioctl_data[7:0],ioctl_data[15:8]};
+		if(ioctl_addr == 'h18A) cart_id[07:00] <= ioctl_data[7:0];
+		if(ioctl_addr == 'h18C) begin
+			     if(cart_id == "T-574023") PIER_QUIRK <= 1; // Pier Solar Reprint
+			else if(cart_id == "T-574013") PIER_QUIRK <= 1; // Pier Solar 1st Edition
+		end
+	end
+end
+
+reg [23:13] rom_mask;
+reg         rom_cart_mode;
+always @(posedge clk_sys) begin
+	if (rom_download & ioctl_wr) begin
+		rom_cart_mode <= ioctl_index[6];
+		if (ioctl_index[6]) begin
+			rom_mask <= rom_mask | ioctl_addr[23:13];
+			if(!ioctl_addr) rom_mask <= 0;
+		end
 	end
 end
 

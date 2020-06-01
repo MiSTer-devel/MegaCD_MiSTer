@@ -71,6 +71,9 @@ module gen
 	input         PAL,
 	input         EXPORT,
 	
+	output        TIME_N,
+	input  [15:0] TIME_DI,
+
 	input         EN_HIFI_PCM,
 	input         LADDER,
 	input         OBJ_LIMIT_HIGH,
@@ -616,21 +619,22 @@ reg  [15:0] VDP_MBUS_D;
 reg  [23:1] MBUS_A;
 reg  [15:0] MBUS_DO;
 
-reg        MBUS_RNW;
-reg        MBUS_UDS_N;
-reg        MBUS_LDS_N;
+reg         MBUS_RNW;
+reg         MBUS_UDS_N;
+reg         MBUS_LDS_N;
 wire [15:0] MBUS_DI;
-reg        MBUS_ASEL_N;
+reg         MBUS_ASEL_N;
 
 reg  [15:0] NO_DATA;
 
 reg         ROM_SEL;
 reg         RAM_SEL;
 reg         FDC_SEL;
+reg         TIME_SEL;
 
 reg   [3:0] mstate;
 reg   [1:0] msrc;
-	
+
 localparam	MSRC_NONE = 0,
 				MSRC_M68K = 1,
 				MSRC_Z80  = 2,
@@ -638,7 +642,7 @@ localparam	MSRC_NONE = 0,
 
 localparam 	MBUS_IDLE         = 0,
 				MBUS_SELECT       = 1,
-				MBUS_RAM_WAIT 		= 2,
+				MBUS_RAM_WAIT     = 2,
 				MBUS_RAM_READ     = 3,
 				MBUS_RAM_WRITE    = 4,
 				MBUS_ROM_READ     = 5,
@@ -647,9 +651,10 @@ localparam 	MBUS_IDLE         = 0,
 				MBUS_JCRT_READ    = 8,
 				MBUS_ZBUS_READ    = 9,
 				MBUS_FDC_READ     = 10,
-				MBUS_NOT_USED		= 11,
-				MBUS_REFRESH		= 12,
-				MBUS_FINISH       = 13; 
+				MBUS_TIME_READ    = 11,
+				MBUS_NOT_USED     = 12,
+				MBUS_REFRESH      = 13,
+				MBUS_FINISH       = 14; 
 
 always @(posedge MCLK) begin
 	reg [8:0] refresh_timer;
@@ -671,6 +676,8 @@ always @(posedge MCLK) begin
 		FDC_SEL <= 0;
 		mstate <= MBUS_IDLE;
 		NO_DATA <= 'h4E71;
+		TIME_SEL <= 0;
+
 		RFS <= 0;
 		//rfs_pend <= 0;
 	end
@@ -760,6 +767,12 @@ always @(posedge MCLK) begin
 					mstate <= MBUS_FDC_READ;
 				end
 
+				// Cart specific register A130XX
+				else if (MBUS_A[23:8] == 'hA130) begin
+					TIME_SEL <= 1;
+					mstate <= MBUS_TIME_READ;
+				end
+
 				//VDP: C00000-C0001F (+mirrors)
 				else if (MBUS_A[23:21] == 3'b110 && !MBUS_A[18:16] && !MBUS_A[7:5]) begin
 					VDP_SEL <= 1;
@@ -835,6 +848,11 @@ always @(posedge MCLK) begin
 				mstate <= MBUS_FINISH;
 			end
 			
+		MBUS_TIME_READ:
+			begin
+				mstate <= MBUS_NOT_USED;
+			end
+
 		MBUS_NOT_USED:
 			begin
 				M68K_MBUS_DTACK_N <= ~(msrc == MSRC_M68K);
@@ -870,6 +888,7 @@ always @(posedge MCLK) begin
 					CTRL_SEL <= 0;
 					IO_SEL <= 0;
 					FDC_SEL <= 0;
+					TIME_SEL <= 0;
 					mstate <= MBUS_IDLE;
 					if (msrc == MSRC_M68K) begin
 						NO_DATA <= MBUS_DI;
@@ -887,6 +906,7 @@ assign MBUS_DI = ROM_SEL ? VDI :
 					  CTRL_SEL ? CTRL_DO :
 					  IO_SEL ? {IO_DO, IO_DO} :
 					  FDC_SEL ? VDI :
+					  TIME_SEL ? TIME_DI :
 					  NO_DATA;
 
 assign VA = MBUS_A;
@@ -897,6 +917,7 @@ assign UDS_N = MBUS_UDS_N;
 assign AS_N = M68K_AS_N;
 assign ASEL_N = MBUS_ASEL_N;										//000000-7FFFFF 68K/VDP/Z80
 assign VCLK_CE = M68K_CLKENn;
+assign TIME_N = ~TIME_SEL;
 
 assign CE0_N =  ~(MBUS_A[23:22] == {1'b0, CART_N});		//000000-3FFFFF /CART=0 or 400000-7FFFFF /CART=1
 assign ROM_N =  ~(MBUS_A[23:21] == {1'b0,~CART_N,1'b0});	//400000-5FFFFF /CART=0 or 000000-1FFFFF /CART=1
