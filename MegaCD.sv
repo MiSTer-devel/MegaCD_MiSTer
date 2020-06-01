@@ -200,28 +200,37 @@ localparam CONF_STR = {
 	"D0RH,Save Backup RAM;",
 	"D0OD,Autosave,No,Yes;",
 	"-;",
-	"OA,Aspect Ratio,4:3,16:9;",
-	"OU,320x224 Aspect,Original,Corrected;",
-	"o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-	"OT,Border,No,Yes;",
-	"oFG,Composite Blend,Off,On,Adaptive;",
-	"OV,Sprite Limit,Normal,High;",
-	"-;",
-	"OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
-	"O8,FM Chip,YM2612,YM3438;",
-	"ON,HiFi PCM,No,Yes;",
-	"-;",
-	"O4,Swap Joysticks,No,Yes;",
-	"O5,6 Buttons Mode,No,Yes;",
-	"OLM,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2;",
-	"OIJ,Mouse,None,Port1,Port2;",
-	"OK,Mouse Flip Y,No,Yes;",
-	"oE,Serial,OFF,SNAC;",
-	"-;",
-	"o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
-	"H4oA,Gun Fire,Joy,Mouse;",
-	"H4oBC,Cross,Small,Medium,Big,None;",
-	"H4oD,Gun Type,Justifier,Menacer;",
+
+	"P1,Audio & Video;",
+	"P1-;",
+	"P1OA,Aspect Ratio,4:3,16:9;",
+	"P1OU,320x224 Aspect,Original,Corrected;",
+	"P1o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"P1-;",
+	"P1OT,Border,No,Yes;",
+	"P1oFG,Composite Blend,Off,On,Adaptive;",
+	"P1OV,Sprite Limit,Normal,High;",
+	"P1-;",
+	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
+	"P1O8,FM Chip,YM2612,YM3438;",
+	"P1ON,HiFi PCM,No,Yes;",
+
+	"P2,Input;",
+	"P2-;",
+	"P2O4,Swap Joysticks,No,Yes;",
+	"P2O5,6 Buttons Mode,No,Yes;",
+	"P2OLM,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2;",
+	"P2-;",
+	"P2OIJ,Mouse,None,Port1,Port2;",
+	"P2OK,Mouse Flip Y,No,Yes;",
+	"P2-;",
+	"P2o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
+	"D4P2oA,Gun Fire,Joy,Mouse;",
+	"D4P2oBC,Cross,Small,Medium,Big,None;",
+	"D4P2oD,Gun Type,Justifier,Menacer;",
+	"P2-;",
+	"P2oE,Serial,OFF,SNAC;",
+
 	"-;",
 	"H2OB,Enable FM,Yes,No;",//11
 	"H2OC,Enable PSG,Yes,No;",//12
@@ -714,7 +723,7 @@ sdram sdram
 	.clk(clk_ram),
 	
 	//MCD: banks 2,3
-	.addr0({(MCD_BANK23 ? 6'b100000 : 6'b011110),MCD_PRG_ADDR}), // 1000000-107FFFF / 0F00000-0F7FFFF
+	.addr0({(MCD_BANK23 ? 6'b100000 : 6'b011111),MCD_PRG_ADDR}), // 1000000-107FFFF / 0F80000-0FFFFFF
 	.din0(MCD_PRG_DO),
 	.dout0(MCD_PRG_DI),
 	.rd0(~MCD_PRG_OE_N),
@@ -735,7 +744,7 @@ sdram sdram
 	.busy1(GEN_MEM_BUSY),
 
 	//Load/Save: banks 0,1
-	.addr2( rom_download ? (rom_cart_mode ? {2'b00,ioctl_addr[22:1]} : {5'b01111,ioctl_addr[19:1]}) : //ROM  000000-7FFFFF/F00000-FFFFFF
+	.addr2( rom_download ? (rom_cart_mode ? {2'b00,ioctl_addr[22:1]} : {6'b011110,ioctl_addr[18:1]}) : //ROM  000000-7FFFFF/F00000-F7FFFF
 								  {5'b01110,tmpram_lba[9:0],tmpram_addr}),    //CART RAM E00000-EFFFFF for sd_*
 	.din2(rom_download ? {ioctl_data[7:0],ioctl_data[15:8]} : {tmpram_dout,tmpram_dout}),
 	.dout2(tmpram_din),
