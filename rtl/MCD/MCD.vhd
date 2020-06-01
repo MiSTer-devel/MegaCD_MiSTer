@@ -8,7 +8,8 @@ entity MCD is
 		CLK				: in std_logic;
 		RST_N				: in std_logic;
 		ENABLE			: in std_logic;
-		
+		MCD_RST_N      : out std_logic;
+
 		EXT_VA   		: in std_logic_vector(17 downto 1);
 		EXT_VDI			: in std_logic_vector(15 downto 0);
 		EXT_VDO			: out std_logic_vector(15 downto 0);
@@ -305,6 +306,8 @@ begin
 		LED_GREEN   	=> LED_GREEN
 	);
 	
+	MCD_RST_N <= ERES_N;
+
 	BRAM_A <= S68K_A(13 downto 1);
 	BRAM_DO <= S68K_DO(7 downto 0);
 	BRAM_WE <= not (CLWE_N or BRAM_N);

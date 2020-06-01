@@ -582,6 +582,8 @@ wire        MCD_BRAM_WE;
 wire        MCD_LED_RED;
 wire        MCD_LED_GREEN;
 
+wire        MCD_RST_N;
+
 wire        gg_available2;
 
 MCD MCD
@@ -589,6 +591,7 @@ MCD MCD
 	.RST_N(~reset),
 	.CLK(clk_sys),
 	.ENABLE(1),
+	.MCD_RST_N(MCD_RST_N),
 
 	.EXT_VA(GEN_VA[17:1]),
 	.EXT_VDI(GEN_VDO),
@@ -833,6 +836,7 @@ always @(posedge clk_sys) begin
 	reg cd_out48_last = 1;
 	reg scd_cdd_send_old = 0;
 	reg [2:0] cnt = 0;
+	reg rst_old = 0;
 	
 	if (cd_out[48] != cd_out48_last)  begin
 		cd_out48_last <= cd_out[48];
@@ -852,6 +856,13 @@ always @(posedge clk_sys) begin
 	if (scd_cdd_send && !scd_cdd_send_old) begin
 		cd_in[47:0] <= {8'h00,scd_cdd_comm};
 		cd_in[48] <= ~cd_in[48];
+	end
+	else begin
+		rst_old <= MCD_RST_N;
+		if (rst_old & ~MCD_RST_N) begin
+			cd_in[47:0] <= 8'hFF;
+			cd_in[48] <= ~cd_in[48];
+		end
 	end
 end
 
