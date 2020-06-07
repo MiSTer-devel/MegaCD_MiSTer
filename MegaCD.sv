@@ -187,9 +187,7 @@ pll pll
 localparam CONF_STR = {
 	"MegaCD;;",
 	"S0,CUE,Insert Disk;",
-	"O2,Reset on insertion,Yes,No;",
 	"-;",
-	"F1,BINGENMD ,Load BIOS;",
 	"O67,Region,JP,US,EU;",
 	"-;",
 	"C,Cheats;",
