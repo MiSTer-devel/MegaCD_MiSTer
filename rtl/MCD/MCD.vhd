@@ -8,7 +8,8 @@ entity MCD is
 		CLK				: in std_logic;
 		RST_N				: in std_logic;
 		ENABLE			: in std_logic;
-		
+		MCD_RST_N      : out std_logic;
+
 		EXT_VA   		: in std_logic_vector(17 downto 1);
 		EXT_VDI			: in std_logic_vector(15 downto 0);
 		EXT_VDO			: out std_logic_vector(15 downto 0);
@@ -58,6 +59,11 @@ entity MCD is
 		
 		LED_RED			: out std_logic;
 		LED_GREEN		: out std_logic;
+		
+		GG_RESET       : in std_logic;
+		GG_EN          : in std_logic;
+		GG_CODE        : in std_logic_vector(128 downto 0);
+		GG_AVAILABLE   : out std_logic;
 		
 		DBG_S68K_A		: out std_logic_vector(23 downto 0)
 	);
@@ -130,7 +136,50 @@ architecture rtl of MCD is
 	signal ASIC_FD_DAT	: std_logic_vector(10 downto 0);
 	signal ASIC_FD_WR		: std_logic;
 
+	signal GENIE_OVR     : std_logic;
+	signal GENIE_DATA    : std_logic_vector(15 downto 0);
+	signal GENIE_DO      : std_logic_vector(15 downto 0);
+	
+	component CODES
+		generic
+		(
+			ADDR_WIDTH    : integer := 16;
+			DATA_WIDTH    : integer := 8
+		);
+		port
+		(
+			clk           : in std_logic;
+			reset         : in std_logic;
+			enable        : in std_logic;
+			addr_in       : in std_logic_vector(23 downto 0);
+			data_in       : in std_logic_vector(15 downto 0);
+			code          : in std_logic_vector(128 downto 0);
+			available     : out std_logic;
+			genie_ovr     : out std_logic;
+			genie_data    : out std_logic_vector(15 downto 0)
+	  );
+	end component; 
+	
 begin
+
+	gg : CODES
+	generic map(
+		ADDR_WIDTH  => 24,
+		DATA_WIDTH  => 16
+	)
+	port map(
+		clk         => CLK,
+		reset       => GG_RESET,
+		enable      => not GG_EN,
+		addr_in     => S68K_A & '0',
+		data_in     => S68K_DI,
+		code        => GG_CODE,
+		available   => GG_AVAILABLE,
+		genie_ovr   => GENIE_OVR,
+		genie_data  => GENIE_DATA
+	);
+
+	GENIE_DO <= GENIE_DATA when GENIE_OVR = '1' else S68K_DI;
 
 	S68K :  entity work.M68K_WRAP
 	port map(
@@ -141,7 +190,7 @@ begin
 		CLKEN_P   	=> S68K_CE_R,
 		CLKEN_N		=> S68K_CE_F,
 		A   			=> S68K_A,
-		DI   			=> S68K_DI,
+		DI   			=> GENIE_DO,
 		DO   			=> S68K_DO,
 		AS_N   		=> S68K_AS_N,
 		RNW   		=> S68K_RNW,
@@ -217,13 +266,13 @@ begin
 		ROM_CE_N   		=> ROM_CE_N,
 		ROM_RDY   		=> ROM_RDY,
 		
-		PRAM_N  			=> PRAM_N,
+		--PRAM_N  			=> PRAM_N,
 		BRAM_N   		=> BRAM_N,
-		BROM_N   		=> BROM_N,
+		--BROM_N   		=> BROM_N,
 		CDC_N	  	 		=> CDC_N,
 		COE_N	  	 		=> COE_N,
 		CLWE_N   		=> CLWE_N,
-		CUWE_N   		=> CUWE_N,
+		--CUWE_N   		=> CUWE_N,
 		CDC_INT_N	   => CDC_INT_N,
 		ERES_N   		=> ERES_N,
 		
@@ -257,6 +306,8 @@ begin
 		LED_GREEN   	=> LED_GREEN
 	);
 	
+	MCD_RST_N <= ERES_N;
+
 	BRAM_A <= S68K_A(13 downto 1);
 	BRAM_DO <= S68K_DO(7 downto 0);
 	BRAM_WE <= not (CLWE_N or BRAM_N);

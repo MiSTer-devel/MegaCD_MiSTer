@@ -117,7 +117,7 @@ architecture rtl of CDC is
 	signal CTRL0 : std_logic_vector(7 downto 0);
 	signal CTRL1 : std_logic_vector(7 downto 0);
 	signal STAT0 : std_logic_vector(7 downto 0) := x"00";
-	signal STAT1 : std_logic_vector(7 downto 0) := x"00";
+	constant STAT1 : std_logic_vector(7 downto 0) := x"00";
 	signal STAT2 : std_logic_vector(7 downto 0) := x"00";
 	signal STAT3 : std_logic_vector(7 downto 0) := x"80";
 	

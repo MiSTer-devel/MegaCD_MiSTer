@@ -73,6 +73,8 @@ entity vdp is
 		vram32_a    : out std_logic_vector(15 downto 1);
 		vram32_q    : in  std_logic_vector(31 downto 0);
 
+		EXINT       : out std_logic;
+		HL          : in  std_logic;
 		HINT        : out std_logic;
 		VINT_TG68   : out std_logic;
 		VINT_T80    : out std_logic;
@@ -110,7 +112,8 @@ entity vdp is
 		VRAM_SPEED  : in  std_logic := '1'; -- 0 - full speed, 1 - FIFO throttle emulation
 		VSCROLL_BUG : in  std_logic := '1'; -- 0 - use nicer effect, 1 - HW original
 		BORDER_EN   : in  std_logic := '0';  -- Enable border
-		OBJ_LIMIT_HIGH_EN : in std_logic := '0' -- Enable more sprites and pixels per line
+		OBJ_LIMIT_HIGH_EN : in std_logic := '0'; -- Enable more sprites and pixels per line
+		TRANSP_DETECT : out std_logic
 	);
 end vdp;
 
@@ -196,6 +199,10 @@ signal SCOL_CLR		: std_logic;
 ----------------------------------------------------------------
 -- INTERRUPTS
 ----------------------------------------------------------------
+signal EXINT_PENDING			: std_logic;
+signal EXINT_PENDING_SET		: std_logic;
+signal EXINT_FF					: std_logic;
+
 signal HINT_COUNT	: std_logic_vector(7 downto 0);
 signal HINT_EN		: std_logic;
 signal HINT_PENDING	: std_logic;
@@ -236,9 +243,11 @@ signal WRIGT_LATCH  : std_logic;
 signal BGCOL		: std_logic_vector(5 downto 0);
 
 signal HIT			: std_logic_vector(7 downto 0);
+signal IE2			: std_logic;
 signal IE1			: std_logic;
 signal IE0			: std_logic;
 
+signal OLD_HL 		: std_logic;
 signal M3			: std_logic;
 signal DE			: std_logic;
 signal M5			: std_logic;
@@ -440,10 +449,10 @@ signal BGBC		: bgbc_t;
 -- signal BGB_COLINFO		: colinfo_t;
 signal BGB_COLINFO_ADDR_A	: std_logic_vector(8 downto 0);
 signal BGB_COLINFO_ADDR_B	: std_logic_vector(8 downto 0);
-signal BGB_COLINFO_D_A		: std_logic_vector(6 downto 0);
+signal BGB_COLINFO_D_A		: std_logic_vector(7 downto 0);
 signal BGB_COLINFO_WE_A		: std_logic;
 signal BGB_COLINFO_WE_B		: std_logic;
-signal BGB_COLINFO_Q_B		: std_logic_vector(6 downto 0);
+signal BGB_COLINFO_Q_B		: std_logic_vector(7 downto 0);
 
 
 signal BGB_X		: std_logic_vector(9 downto 0);
@@ -455,6 +464,10 @@ signal T_BGB_PAL	: std_logic_vector(1 downto 0);
 signal T_BGB_COLNO	: std_logic_vector(3 downto 0);
 signal BGB_BASE		: std_logic_vector(15 downto 0);
 signal BGB_HF		: std_logic;
+signal BGB_TRANSP0	: std_logic;
+signal BGB_TRANSP1	: std_logic;
+signal BGB_TRANSP2	: std_logic;
+signal BGB_TRANSP3	: std_logic;
 
 signal BGB_NAMETABLE_ITEMS  : std_logic_vector(31 downto 0);
 signal BGB_VRAM_ADDR        : std_logic_vector(15 downto 1);
@@ -488,10 +501,10 @@ signal BGAC		: bgac_t;
 -- signal BGA_COLINFO		: colinfo_t;
 signal BGA_COLINFO_ADDR_A	: std_logic_vector(8 downto 0);
 signal BGA_COLINFO_ADDR_B	: std_logic_vector(8 downto 0);
-signal BGA_COLINFO_D_A		: std_logic_vector(6 downto 0);
+signal BGA_COLINFO_D_A		: std_logic_vector(7 downto 0);
 signal BGA_COLINFO_WE_A		: std_logic;
 signal BGA_COLINFO_WE_B		: std_logic;
-signal BGA_COLINFO_Q_B		: std_logic_vector(6 downto 0);
+signal BGA_COLINFO_Q_B		: std_logic_vector(7 downto 0);
 
 signal BGA_X		: std_logic_vector(9 downto 0);
 signal BGA_POS		: std_logic_vector(9 downto 0);
@@ -503,6 +516,10 @@ signal T_BGA_COLNO	: std_logic_vector(3 downto 0);
 signal BGA_BASE		: std_logic_vector(15 downto 0);
 signal BGA_TILEBASE	: std_logic_vector(15 downto 0);
 signal BGA_HF		: std_logic;
+signal BGA_TRANSP0	: std_logic;
+signal BGA_TRANSP1	: std_logic;
+signal BGA_TRANSP2	: std_logic;
+signal BGA_TRANSP3	: std_logic;
 
 signal BGA_NAMETABLE_ITEMS  : std_logic_vector(31 downto 0);
 signal BGA_VRAM_ADDR        : std_logic_vector(15 downto 1);
@@ -679,7 +696,7 @@ begin
 bgb_ci : entity work.DualPortRAM
 generic map (
 	addrbits => 9,
-	databits => 7
+	databits => 8
 )
 port map(
 	address_a	=> BGB_COLINFO_ADDR_A,
@@ -697,7 +714,7 @@ BGB_COLINFO_WE_B <= '0';
 bga_ci : entity work.DualPortRAM
 generic map (
 	addrbits => 9,
-	databits => 7
+	databits => 8
 )
 port map(
 	address_a	=> BGA_COLINFO_ADDR_A,
@@ -881,6 +898,7 @@ WRIGT <= REG(17)(7);
 BGCOL <= REG(7)(5 downto 0);
 
 HIT <= REG(10);
+IE2 <= REG(11)(3);
 IE1 <= REG(0)(4);
 IE0 <= REG(1)(5);
 
@@ -1057,6 +1075,11 @@ end process;
 ----------------------------------------------------------------
 -- BACKGROUND B RENDERING
 ----------------------------------------------------------------
+BGB_TRANSP0 <= '1' when (BGB_VRAM32_DO( 3 downto  0) or BGB_VRAM32_DO(11 downto  8)) = "0000" else '0';
+BGB_TRANSP1 <= '1' when (BGB_VRAM32_DO( 7 downto  4) or BGB_VRAM32_DO(15 downto 12)) = "0000" else '0';
+BGB_TRANSP2 <= '1' when (BGB_VRAM32_DO(19 downto 16) or BGB_VRAM32_DO(27 downto 24)) = "0000" else '0';
+BGB_TRANSP3 <= '1' when (BGB_VRAM32_DO(23 downto 20) or BGB_VRAM32_DO(31 downto 28)) = "0000" else '0';
+
 process( RST_N, CLK )
 variable V_BGB_XSTART	: std_logic_vector(9 downto 0);
 variable V_BGB_BASE		: std_logic_vector(15 downto 0);
@@ -1251,57 +1274,57 @@ begin
 					case BGB_X(2 downto 0) is
 					when "100" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 3 downto  0);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 3 downto  0);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(31 downto 28);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(31 downto 28);
 						end if;
 					when "101" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 7 downto  4);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 7 downto  4);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(27 downto 24);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(27 downto 24);
 						end if;
 					when "110" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(11 downto  8);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(11 downto  8);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(23 downto 20);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(23 downto 20);
 						end if;
 					when "111" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(15 downto 12);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(15 downto 12);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(19 downto 16);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(19 downto 16);
 						end if;
 					when "000" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(19 downto 16);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(19 downto 16);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(15 downto 12);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(15 downto 12);
 						end if;
 					when "001" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(23 downto 20);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(23 downto 20);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(11 downto  8);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(11 downto  8);
 						end if;
 					when "010" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(27 downto 24);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(27 downto 24);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 7 downto  4);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 7 downto  4);
 						end if;
 					when "011" =>
 						if BGB_HF = '1' then
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(31 downto 28);
+							BGB_COLINFO_D_A <= (BGB_TRANSP2 xor BGB_TRANSP3) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO(31 downto 28);
 						else
-							BGB_COLINFO_D_A <= T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 3 downto  0);
+							BGB_COLINFO_D_A <= (BGB_TRANSP0 xor BGB_TRANSP1) & T_BGB_PRI & T_BGB_PAL & BGB_VRAM32_DO( 3 downto  0);
 						end if;
 					when others => null;
 					end case;
 
 					if BGB_ENABLE = '0' or DE = '0' then
-						BGB_COLINFO_D_A <= '0' & BGCOL;
+						BGB_COLINFO_D_A <= "00" & BGCOL;
 					end if;
 
 					BGB_X <= (BGB_X + 1) and hscroll_mask;
@@ -1330,6 +1353,11 @@ end process;
 ----------------------------------------------------------------
 -- BACKGROUND A RENDERING
 ----------------------------------------------------------------
+BGA_TRANSP0 <= '1' when (BGA_VRAM32_DO( 3 downto  0) or BGA_VRAM32_DO(11 downto  8)) = "0000" else '0';
+BGA_TRANSP1 <= '1' when (BGA_VRAM32_DO( 7 downto  4) or BGA_VRAM32_DO(15 downto 12)) = "0000" else '0';
+BGA_TRANSP2 <= '1' when (BGA_VRAM32_DO(19 downto 16) or BGA_VRAM32_DO(27 downto 24)) = "0000" else '0';
+BGA_TRANSP3 <= '1' when (BGA_VRAM32_DO(23 downto 20) or BGA_VRAM32_DO(31 downto 28)) = "0000" else '0';
+
 process( RST_N, CLK )
 variable V_BGA_XSTART	: std_logic_vector(9 downto 0);
 variable V_BGA_XBASE		: std_logic_vector(15 downto 0);
@@ -1560,57 +1588,57 @@ begin
 					case tile_pos(2 downto 0) is
 						when "100" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 3 downto  0);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 3 downto  0);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(31 downto 28);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(31 downto 28);
 							end if;
 						when "101" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 7 downto  4);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 7 downto  4);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(27 downto 24);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(27 downto 24);
 							end if;
 						when "110" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(11 downto  8);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(11 downto  8);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(23 downto 20);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(23 downto 20);
 							end if;
 						when "111" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(15 downto 12);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(15 downto 12);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(19 downto 16);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(19 downto 16);
 							end if;
 						when "000" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(19 downto 16);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(19 downto 16);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(15 downto 12);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(15 downto 12);
 							end if;
 						when "001" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(23 downto 20);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(23 downto 20);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(11 downto  8);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(11 downto  8);
 							end if;
 						when "010" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(27 downto 24);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(27 downto 24);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 7 downto  4);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 7 downto  4);
 							end if;
 						when "011" =>
 							if BGA_HF = '1' then
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(31 downto 28);
+								BGA_COLINFO_D_A <= (BGA_TRANSP2 xor BGA_TRANSP3) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO(31 downto 28);
 							else
-								BGA_COLINFO_D_A <= T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 3 downto  0);
+								BGA_COLINFO_D_A <= (BGA_TRANSP0 xor BGA_TRANSP1) & T_BGA_PRI & T_BGA_PAL & BGA_VRAM32_DO( 3 downto  0);
 							end if;
 						when others => null;
 					end case;
 
 					if BGA_ENABLE = '0' or DE = '0' then
-						BGA_COLINFO_D_A <= '0' & BGCOL;
+						BGA_COLINFO_D_A <= "00" & BGCOL;
 					end if;
 
 					BGA_X <= (BGA_X + 1) and hscroll_mask;
@@ -2280,6 +2308,7 @@ begin
 		V_ACTIVE <= '0';
 		V_ACTIVE_DISP <= '0';
 
+		EXINT_PENDING_SET <= '0';
 		HINT_EN <= '0';
 		HINT_PENDING_SET <= '0';
 		VINT_TG68_PENDING_SET <= '0';
@@ -2300,10 +2329,7 @@ begin
 
 	elsif rising_edge(CLK) then
 
-		if M3='0' then
-			HV <= HV_VCNT_EXT(7 downto 1) & HV8 & HV_HCNT(8 downto 1);
-		end if;
-
+		EXINT_PENDING_SET <= '0';
 		HINT_PENDING_SET <= '0';
 		VINT_TG68_PENDING_SET <= '0';
 		VINT_T80_SET <= '0';
@@ -2315,9 +2341,19 @@ begin
 		SP1_EN <= '0';
 		SP2_EN <= '0';
 		BGA_MAPPING_EN <= '0';
-		BGA_PATTERN_EN <= '0';
+		--BGA_PATTERN_EN <= '0';
 		BGB_MAPPING_EN <= '0';
-		BGB_PATTERN_EN <= '0';
+		--BGB_PATTERN_EN <= '0';
+		
+		OLD_HL <= HL;
+		if OLD_HL = '1' and HL = '0' then
+			HV <= HV_VCNT_EXT(7 downto 1) & HV8 & HV_HCNT(8 downto 1);
+			EXINT_PENDING_SET <= '1';
+		end if;
+
+		if M3 ='0' then	
+			HV <= HV_VCNT_EXT(7 downto 1) & HV8 & HV_HCNT(8 downto 1);
+		end if;
 
 		-- H40 slow slots: 8aaaaaaa99aaaaaaa8aaaaaaa99aaaaaaa
 		-- 8, 10, 10, 10, 10, 10, 10, 10, 9, 9, 10, 10, 10, 10, 10, 10, 10, 8, 10, 10, 10, 10, 10, 10, 10, 9, 9, 10, 10, 10, 10, 10, 10, 10
@@ -2451,13 +2487,13 @@ begin
 			case HV_HCNT(3 downto 0) is
 				when "0010" => BGA_MAPPING_EN <= '1';
 				when "0100" => null; -- external or refresh
-				when "0110" => BGA_PATTERN_EN <= '1';
-				when "1000" => BGA_PATTERN_EN <= '1';
+				--when "0110" => BGA_PATTERN_EN <= '1';
+				--when "1000" => BGA_PATTERN_EN <= '1';
 				when "1010" => BGB_MAPPING_EN <= '1';
 				when "1100" => SP2_EN <= '1';
-				when "1110" => BGB_PATTERN_EN <= '1';
+				--when "1110" => BGB_PATTERN_EN <= '1';
 				when "0000" =>
-					BGB_PATTERN_EN <= '1';
+					--BGB_PATTERN_EN <= '1';
 					if OBJ_LIMIT_HIGH_EN = '1' then
 						SP2_EN <= '1'; -- Update SP2 twice as often when sprite limit is increased
 					end if;
@@ -2597,6 +2633,18 @@ begin
 					col := BGB_COLINFO_Q_B(5 downto 0);
 				else
 					col := BGCOL;
+				end if;
+
+				if OBJ_COLINFO2_Q(3 downto 0) /= "0000" and OBJ_COLINFO2_Q(6) = '1' and (SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") then
+					TRANSP_DETECT <= '0';
+				elsif BGA_COLINFO_Q_B(6) = '1' and BGA_COLINFO_Q_B(7) = '1' then
+					TRANSP_DETECT <= '1';
+				elsif BGB_COLINFO_Q_B(6) = '1' and BGB_COLINFO_Q_B(7) = '1' then
+					TRANSP_DETECT <= '1';
+				elsif OBJ_COLINFO2_Q(3 downto 0) /= "0000" and (SHI='0' or OBJ_COLINFO2_Q(5 downto 1) /= "11111") then
+					TRANSP_DETECT <= '0';
+				else
+					TRANSP_DETECT <= BGA_COLINFO_Q_B(7);
 				end if;
 
 				case DBG(8 downto 7) is
@@ -3521,6 +3569,7 @@ end process;
 process( RST_N, CLK )
 begin
 	if RST_N = '0' then
+		EXINT_PENDING <= '0';
 		HINT_PENDING <= '0';
 		VINT_TG68_PENDING <= '0';
 	elsif rising_edge( CLK) then
@@ -3531,13 +3580,33 @@ begin
 				VINT_TG68_PENDING <= '0';
 			elsif HINT_FF = '1' then
 				HINT_PENDING <= '0';
+			elsif EXINT_FF = '1' then
+				EXINT_PENDING <= '0';
 			end if;
+		end if;
+		if EXINT_PENDING_SET = '1' then
+			EXINT_PENDING <= '1';
 		end if;
 		if HINT_PENDING_SET = '1' then
 			HINT_PENDING <= '1';
 		end if;
 		if VINT_TG68_PENDING_SET = '1' then
 			VINT_TG68_PENDING <= '1';
+		end if;
+	end if;	
+end process;
+
+-- EXINT
+EXINT <= EXINT_FF;
+process( RST_N, CLK )
+begin
+	if RST_N = '0' then
+		EXINT_FF <= '0';
+	elsif rising_edge( CLK) then
+		if EXINT_PENDING = '1' and IE2 = '1' then
+			EXINT_FF <= '1';
+		else
+			EXINT_FF <= '0';
 		end if;
 	end if;	
 end process;

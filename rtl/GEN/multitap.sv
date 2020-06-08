@@ -45,14 +45,27 @@ module multitap
 	input        P2_UP, P2_DOWN, P2_LEFT, P2_RIGHT, P2_A, P2_B, P2_C, P2_START, P2_MODE, P2_X, P2_Y, P2_Z,
 	input        P3_UP, P3_DOWN, P3_LEFT, P3_RIGHT, P3_A, P3_B, P3_C, P3_START, P3_MODE, P3_X, P3_Y, P3_Z,
 	input        P4_UP, P4_DOWN, P4_LEFT, P4_RIGHT, P4_A, P4_B, P4_C, P4_START, P4_MODE, P4_X, P4_Y, P4_Z,
+	input        P5_UP, P5_DOWN, P5_LEFT, P5_RIGHT, P5_A, P5_B, P5_C, P5_START, P5_MODE, P5_X, P5_Y, P5_Z,
 
-	input        DISK_N,
+	input        DISK,
 
-	input        TEAMPLAYER_EN,
+	input  [1:0] TEAMPLAYER_EN,
 	input        FOURWAY_EN,
 
 	input [24:0] MOUSE,
 	input  [2:0] MOUSE_OPT,
+	
+	input        GUN_OPT,
+	input        GUN_TYPE,
+	input        GUN_SENSOR,
+	input        GUN_A,
+	input        GUN_B,
+	input        GUN_C,
+	input        GUN_START,
+
+	input  [7:0] SERJOYSTICK_IN,
+	output [7:0] SERJOYSTICK_OUT,
+	input  [1:0] SER_OPT,
 
 	input        PAL,
 	input        EXPORT,
@@ -63,16 +76,26 @@ module multitap
 	input  [7:0] DI,
 	output [7:0] DO,
 	output       DTACK_N,
-
-	input        JCART_SEL,
-	output[15:0] JCART_DO,
-	output       JCART_DTACK_N
+	output       HL
 );
 
 wire [7:0] GEN_DO;
 gen_io io
 (
 	.*,
+
+	.P2_UP   (TEAMPLAYER_EN[0] ? P5_UP    : P2_UP   ),
+	.P2_DOWN (TEAMPLAYER_EN[0] ? P5_DOWN  : P2_DOWN ),
+	.P2_LEFT (TEAMPLAYER_EN[0] ? P5_LEFT  : P2_LEFT ),
+	.P2_RIGHT(TEAMPLAYER_EN[0] ? P5_RIGHT : P2_RIGHT),
+	.P2_A    (TEAMPLAYER_EN[0] ? P5_A     : P2_A    ),
+	.P2_B    (TEAMPLAYER_EN[0] ? P5_B     : P2_B    ),
+	.P2_C    (TEAMPLAYER_EN[0] ? P5_C     : P2_C    ),
+	.P2_START(TEAMPLAYER_EN[0] ? P5_START : P2_START),
+	.P2_MODE (TEAMPLAYER_EN[0] ? P5_MODE  : P2_MODE ),
+	.P2_X    (TEAMPLAYER_EN[0] ? P5_X     : P2_X    ),
+	.P2_Y    (TEAMPLAYER_EN[0] ? P5_Y     : P2_Y    ),
+	.P2_Z    (TEAMPLAYER_EN[0] ? P5_Z     : P2_Z    ),
 
 	.DO(GEN_DO)
 );
@@ -91,59 +114,13 @@ teamplayer teamplayer
 (
 	.*,
 
+	.PORT(TEAMPLAYER_EN[1]),
 	.DO(TP_DO),
 	.DTACK_N()
 );
 
-pad_io jcart_u
-(
-	.*,
-
-	.P_UP(P4_UP),
-	.P_DOWN(P4_DOWN),
-	.P_LEFT(P4_LEFT),
-	.P_RIGHT(P4_RIGHT),
-	.P_A(P4_A),
-	.P_B(P4_B),
-	.P_C(P4_C),
-	.P_START(P4_START),
-	.P_MODE(P4_MODE),
-	.P_X(P4_X),
-	.P_Y(P4_Y),
-	.P_Z(P4_Z),
-
-	.SEL(JCART_SEL),
-	.DIR(0),
-	.DI(DI[0]),
-	.DO(JCART_DO[15:8]),
-	.DTACK_N(JCART_DTACK_N)
-);
-
-pad_io jcart_l
-(
-	.*,
-
-	.P_UP(P3_UP),
-	.P_DOWN(P3_DOWN),
-	.P_LEFT(P3_LEFT),
-	.P_RIGHT(P3_RIGHT),
-	.P_A(P3_A),
-	.P_B(P3_B),
-	.P_C(P3_C),
-	.P_START(P3_START),
-	.P_MODE(P3_MODE),
-	.P_X(P3_X),
-	.P_Y(P3_Y),
-	.P_Z(P3_Z),
-
-	.SEL(JCART_SEL),
-	.DIR(0),
-	.DI(DI[0]),
-	.DO(JCART_DO[7:0]),
-	.DTACK_N()
-);
-
-wire MT_SEL = (A==1 || A==2);
-assign DO = (FOURWAY_EN & MT_SEL) ? FW_DO : (TEAMPLAYER_EN & MT_SEL) ? TP_DO : GEN_DO;
+assign DO = (FOURWAY_EN && (A==1 || A==2)) ? FW_DO : 
+            ((TEAMPLAYER_EN[0] && A==1) || (TEAMPLAYER_EN[1] && A==2)) ? TP_DO :
+            GEN_DO;
 
 endmodule
