@@ -112,7 +112,12 @@ always @(posedge RESET or posedge CLK) begin
 	else if(CE) begin
 		if(~SEL) DTACK_N <= 1;
 		else if(SEL & DTACK_N) begin
-			if(~RNW) R[A] <= DI;
+			if(~RNW) begin
+				case(A)
+				9,12,15: R[A] <= DI & 8'hF8;//Port A,B,C S-Ctrl [2:0] is read-only
+				default: R[A] <= DI;
+				endcase
+			end
 			else begin
 				// Read
 				case(A)
