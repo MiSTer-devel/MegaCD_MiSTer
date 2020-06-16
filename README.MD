@@ -19,7 +19,7 @@ ZIP is supported but doesn't work due to long positioning time.
 So DON'T zip the images!
 
 ### CD BIOS
-support BIOS per game. Place cd_bios.rom in game's folder.
+support BIOS per game. Place BIOS named boot.rom in game's folder.
 
 ### Pier Solar
 Place cartridge dump named cart.rom into game's folder
