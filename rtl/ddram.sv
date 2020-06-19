@@ -1,6 +1,6 @@
 //
 // ddram.v
-// Copyright (c) 2017 Sorgelig
+// Copyright (c) 2020 Sorgelig
 //
 //
 // This source file is free software: you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 // ------------------------------------------
 //
 
-// 8-bit version
 
 module ddram
 (
@@ -35,131 +34,103 @@ module ddram
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
 
-	input  [27:0] wraddr,
-	input  [15:0] din,
-	input         we_req,
-	output reg    we_ack,
+	input         cache_rst,
 
-	input  [27:1] rdaddr,
-	output [15:0] dout,
-	input         rd_req,
-	output reg    rd_ack,
-	
-	input  [27:1] rdaddr2,
-	output [15:0] dout2,
-	input         rd_req2,
-	output reg    rd_ack2 
+	input  [27:1] mem_addr,
+	output [15:0] mem_dout,
+	input  [15:0] mem_din,
+	input         mem_rd,
+	input         mem_wrl,
+	input         mem_wrh,
+	output reg    mem_busy
 );
 
 assign DDRAM_BURSTCNT = ram_burst;
-assign DDRAM_BE       = (8'd3<<{ram_address[2:1],1'b0}) | {8{ram_read}};
-assign DDRAM_ADDR     = {4'b0011, ram_address[27:3]}; // RAM at 0x30000000
-assign DDRAM_RD       = ram_read;
-assign DDRAM_DIN      = ram_data;
+assign DDRAM_BE       = DDRAM_RD ? 8'hFF : ({6'd0,ram_bs} << {mem_addr[2:1],1'b0});
+assign DDRAM_ADDR     = {4'b0011, mem_addr[27:3]}; // RAM at 0x30000000
+assign DDRAM_DIN      = {4{mem_din}};
 assign DDRAM_WE       = ram_write;
 
-assign dout = (rdaddr[27:1] < wraddr[27:1]) ? ram_q[{rdaddr[2:1], 4'b0000} +:16] : 16'd0;
-assign dout2 = (rdaddr2[27:1] < wraddr[27:1]) ? ram_q2[{rdaddr2[2:1], 4'b0000} +:16] : 16'd0; 
+assign mem_dout = data;
 
 reg  [7:0] ram_burst;
-reg [63:0] ram_q, next_q, ram_q2, next_q2;
-reg [63:0] ram_data;
-reg [27:0] ram_address, cache_addr, cache_addr2;
-reg        ram_read = 0;
+reg  [1:0] ram_bs;
+reg [15:0] data;
 reg        ram_write = 0;
+reg  [1:0] state = 0;
 
-reg [1:0]  state  = 0;
-reg        ch = 0; 
+wire wr = mem_wrl | mem_wrh;
+wire rd = mem_rd;
 
 always @(posedge DDRAM_CLK) begin
+	reg old_rd, old_wr;
+
+	old_rd <= old_rd & rd;
+	old_wr <= old_wr & wr;
+	
+	ram_burst <= 1;
 
 	if(!DDRAM_BUSY) begin
 		ram_write <= 0;
-		ram_read  <= 0;
-
 		case(state)
-			0: if(we_ack != we_req) begin
-					ram_data		<= {4{din}};
-					ram_address <= wraddr;
-					ram_write 	<= 1;
-					ram_burst   <= 1;
-					state       <= 1;
-				end
-				else if(rd_req != rd_ack) begin
-					if(cache_addr[27:3] == rdaddr[27:3]) rd_ack <= rd_req;
-					else if((cache_addr[27:3]+1'd1) == rdaddr[27:3]) begin
-						rd_ack      <= rd_req;
-						ram_q       <= next_q;
-						cache_addr  <= {rdaddr[27:3],3'b000};
-						ram_address <= {rdaddr[27:3]+1'd1,3'b000};
-						ram_read    <= 1;
-						ram_burst   <= 1;
-						ch 			<= 0; 
-						state       <= 3;
+			0: begin
+					mem_busy <= 0;
+					cache_cs <= 0;
+					if ((~old_rd && rd) || (~old_wr && wr)) begin
+						old_rd <= rd;
+						old_wr <= wr;
+						ram_bs <= {mem_wrh,mem_wrl};
+						ram_write <= wr;
+						cache_we <= wr;
+						mem_busy <= 1;
+						cache_cs <= 1;
+						state <= wr ? 2'd1 : 2'd2;
 					end
-					else begin
-						ram_address <= {rdaddr[27:3],3'b000};
-						cache_addr  <= {rdaddr[27:3],3'b000};
-						ram_read    <= 1;
-						ram_burst   <= 2;
-						ch 			<= 0; 
-						state       <= 2;
-					end 
-				end
-				else if(rd_req2 != rd_ack2) begin
-					if(cache_addr2[27:3] == rdaddr2[27:3]) rd_ack2 <= rd_req2;
-					else if((cache_addr2[27:3]+1'd1) == rdaddr2[27:3]) begin
-						rd_ack2      <= rd_req2;
-						ram_q2       <= next_q2;
-						cache_addr2  <= {rdaddr2[27:3],3'b000};
-						ram_address <= {rdaddr2[27:3]+1'd1,3'b000};
-						ram_read    <= 1;
-						ram_burst   <= 1;
-						ch 			<= 1;
-						state       <= 3;
-					end
-					else begin
-						ram_address <= {rdaddr2[27:3],3'b000};
-						cache_addr2  <= {rdaddr2[27:3],3'b000};
-						ram_read    <= 1;
-						ram_burst   <= 2;
-						ch 			<= 1;
-						state       <= 2;
-					end 
-				end 
-
-			1: begin
-					cache_addr <= '1;
-					cache_addr2 <= '1; 
-					cache_addr[3:0] <= 0;
-					cache_addr2[3:0] <= 0; 
-					we_ack <= we_req;
-					state  <= 0;
-				end
-		
-			2: if(DDRAM_DOUT_READY) begin
-					if (~ch) begin
-						ram_q  <= DDRAM_DOUT;
-						rd_ack <= rd_req;
-					end
-					else begin
-						ram_q2  <= DDRAM_DOUT;
-						rd_ack2 <= rd_req2;
-					end 
-					state  <= 3;
 				end
 
-			3: if(DDRAM_DOUT_READY) begin
-					if (~ch) begin
-						next_q <= DDRAM_DOUT;
-					end
-					else begin
-						next_q2 <= DDRAM_DOUT;
-					end 
-					state  <= 0;
+			1: if(cache_wrack) begin
+					cache_cs <= 0;
+					state <= 3;
 				end
+
+			2: if(cache_rdack) begin
+					cache_cs <= 0;
+					data <= cache_do;
+					state <= 3;
+				end
+
+			3: state <= 0;
+
 		endcase
 	end
 end
+
+wire [15:0] cache_do;
+wire        cache_rdack;
+wire        cache_wrack;
+reg         cache_cs;
+reg         cache_we;
+
+cache_2way cache
+(
+	.clk(DDRAM_CLK),
+	.rst(cache_rst),
+
+	.cache_enable(1),
+
+	.cpu_cs(cache_cs),
+	.cpu_adr(mem_addr[27:1]),
+	.cpu_bs(ram_bs),
+	.cpu_we(cache_we),
+	.cpu_rd(~cache_we),
+	.cpu_dat_w(mem_din),
+	.cpu_dat_r(cache_do),
+	.cpu_ack(cache_rdack),
+	.wb_en(cache_wrack),
+
+	.mem_dat_r(DDRAM_DOUT),
+	.mem_read_req(DDRAM_RD),
+	.mem_read_ack(DDRAM_DOUT_READY)
+);
 
 endmodule

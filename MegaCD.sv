@@ -127,7 +127,6 @@ module emu
 assign ADC_BUS  = 'Z;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign BUTTONS   = {bk_reload, 1'b0};
-assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
 always_comb begin
@@ -714,24 +713,49 @@ always @(posedge clk_sys) begin
 	if(rom_download & ioctl_wr) ioctl_wait <= 1;
 	if(old_busy & ~tmpram_busy) ioctl_wait <= 0;
 end
- 
+
+wire use_sdr = 1;
+
+assign MCD_PRG_BUSY = use_sdr ? sdr_busy : ddr_busy;
+assign MCD_PRG_DI   = use_sdr ? sdr_do   : ddr_do;
+
+wire ddr_busy;
+wire [15:0] ddr_do;
+assign DDRAM_CLK = clk_ram & ~use_sdr;
+ddram ddram
+(
+	.*,
+
+	.cache_rst(reset),
+
+	.mem_addr(MCD_PRG_ADDR),
+	.mem_dout(ddr_do),
+	.mem_din(MCD_PRG_DO),
+	.mem_rd(~use_sdr & ~MCD_PRG_OE_N),
+	.mem_wrl(~use_sdr & ~MCD_PRG_WRL_N),
+	.mem_wrh(~use_sdr & ~MCD_PRG_WRH_N),
+	.mem_busy(ddr_busy)
+);
+
 
 //MCD PRGRAM, GEN ROM/RAM/CART RAM
+wire sdr_busy;
+wire [15:0] sdr_do;
 sdram sdram
 (
 	.*,
 	.init(~locked),
 	.clk(clk_ram),
-	
+
 	//MCD: banks 2,3
 	.addr0({(MCD_BANK23 ? 6'b100000 : 6'b011111),MCD_PRG_ADDR}), // 1000000-107FFFF / 0F80000-0FFFFFF
 	.din0(MCD_PRG_DO),
-	.dout0(MCD_PRG_DI),
-	.rd0(~MCD_PRG_OE_N),
-	.wrl0(~MCD_PRG_WRL_N),
-	.wrh0(~MCD_PRG_WRH_N),
-	.busy0(MCD_PRG_BUSY),
-	
+	.dout0(sdr_do),
+	.rd0(use_sdr & ~MCD_PRG_OE_N),
+	.wrl0(use_sdr & ~MCD_PRG_WRL_N),
+	.wrh0(use_sdr & ~MCD_PRG_WRH_N),
+	.busy0(sdr_busy),
+
 	//Genesis: banks 0,1
 	.addr1(!GEN_RAM_CE_N  ? {9'b010000000,GEN_VA[15:1]} : //WORK RAM 800000-80FFFF
 			 !CART_RAM_CE_N ? {5'b01110,GEN_VA[19:1]}     : //CART RAM E00000-EFFFFF
