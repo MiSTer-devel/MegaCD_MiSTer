@@ -1240,7 +1240,7 @@ begin
 				
 				if CLK_12M_F = '1' then
 					TIME_CLK_CNT <= TIME_CLK_CNT + 1;
-					if TIME_CLK_CNT = "110011100" then
+					if TIME_CLK_CNT = "110011011" then
 						TIME_CLK_CNT <= (others => '0');
 						
 						if SW_CLR = '1' then
@@ -1250,17 +1250,19 @@ begin
 							SW <= std_logic_vector( unsigned(SW) + 1 );
 						end if;
 						
-						if TIMER_SET = '1' then
-							TIMER <= unsigned(TM);
-							TIMER_SET <= '0';
-						elsif TIMER /= x"00" then
+						if TIMER /= x"00" then
 							TIMER <= TIMER - 1;
-							if TIMER = 1 and IEN(3) = '1' and INT_PEND(3) = '0' then
-								INT_PEND(3) <= '1';
-							end if;
 						else
 							TIMER <= unsigned(TM);
+							if IEN(3) = '1' and INT_PEND(3) = '0' then
+								INT_PEND(3) <= '1';
+							end if;
 						end if;
+					end if;
+					
+					if TIMER_SET = '1' then
+						TIMER <= unsigned(TM);
+						TIMER_SET <= '0';
 					end if;
 				end if;
 			
