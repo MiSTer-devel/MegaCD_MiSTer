@@ -587,7 +587,7 @@ wire        gg_available2;
 
 MCD MCD
 (
-	.RST_N(~reset),
+	.RST_N(~(reset|rom_download)),
 	.CLK(clk_sys),
 	.ENABLE(1),
 	.MCD_RST_N(MCD_RST_N),
