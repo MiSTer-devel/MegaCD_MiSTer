@@ -189,6 +189,7 @@ localparam CONF_STR = {
 	"S0,CUE,Insert Disk;",
 	"-;",
 	"O67,Region,JP,US,EU;",
+	"oH,Auto Cart Region,Disabled,Header;",
 	"-;",
 	"C,Cheats;",
 	"H5OO,Cheats Enabled,Yes,No;",
@@ -1055,7 +1056,7 @@ always @(posedge clk_sys) begin
 	end
 
 	old_ready <= cart_hdr_ready;
-	if(~old_ready & cart_hdr_ready) begin
+	if(status[49] & ~old_ready & cart_hdr_ready) begin
 		region_set <= 1;
 		if(hdr_u) region_req <= 1;
 		else if(hdr_j) region_req <= 0;
