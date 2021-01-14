@@ -86,6 +86,7 @@ module gen
 	output        HBL,
 	output        VBL,
 	output        CE_PIX,
+	output        TRANSP_DETECT,
 	input         BORDER,
 
 	output        INTERLACE,
@@ -131,8 +132,7 @@ module gen
 	output        GG_AVAILABLE,
 
 	output [23:0] DBG_M68K_A,
-	output [23:0] DBG_MBUS_A,
-	output        TRANSP_DETECT
+	output [23:0] DBG_MBUS_A
 );
 
 reg reset;
@@ -647,6 +647,7 @@ always @(posedge MCLK) begin
 		TIME_SEL <= 0;
 
 		RFS <= 0;
+		DBG_HOOK <= '0;
 		//rfs_pend <= 0;
 	end
 	else begin
@@ -1102,7 +1103,7 @@ always @(posedge MCLK) begin
 		if (Z80_MBUS_SEL && Z80_BR_N && Z80_BGACK_N && VBUS_BR_N && VBUS_BGACK_N && M68K_CLKENp) begin
 			Z80_BR_N <= 0;
 		end
-		else if (!Z80_BR_N && !M68K_BG_N && M68K_AS_N && M68K_CLKENn) begin
+		else if (!Z80_BR_N && !M68K_BG_N && VBUS_BR_N && VBUS_BGACK_N && M68K_AS_N && M68K_CLKENn) begin
 			Z80_BGACK_N <= 0;
 		end
 		else if (!Z80_BGACK_N && !Z80_BR_N && !M68K_BG_N && M68K_CLKENp) begin
