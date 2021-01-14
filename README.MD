@@ -1,4 +1,4 @@
-# MegaCD for MiSTer by srg320
+# [Sega MegaCD](https://en.wikipedia.org/wiki/Sega_CD) for [MiSTer Platform](https://github.com/MiSTer-devel/Main_MiSTer/wiki)
 
 # Installation
 Place BIOS to MegaCD folder with name boot.rom

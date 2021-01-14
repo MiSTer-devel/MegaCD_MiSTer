@@ -189,6 +189,7 @@ localparam CONF_STR = {
 	"S0,CUE,Insert Disk;",
 	"-;",
 	"O67,Region,JP,US,EU;",
+	"oH,Auto Cart Region,Disabled,Header;",
 	"-;",
 	"C,Cheats;",
 	"H5OO,Cheats Enabled,Yes,No;",
@@ -498,8 +499,8 @@ gen gen
 	.EN_SPR(EN_VDP_SPR),
 
 	.J3BUT(~status[5]),
-	.JOY_1(status[4] ? joystick_1 : joystick_0),
-	.JOY_2(status[4] ? joystick_0 : joystick_1),
+	.JOY_1(status[4] ^ status[46] ? joystick_1 : joystick_0),
+	.JOY_2(status[4] ^ status[46] ? joystick_0 : joystick_1),
 	.JOY_3(joystick_2),
 	.JOY_4(joystick_3),
 	.JOY_5(joystick_4),
@@ -586,7 +587,7 @@ wire        gg_available2;
 
 MCD MCD
 (
-	.RST_N(~reset),
+	.RST_N(~(reset|rom_download)),
 	.CLK(clk_sys),
 	.ENABLE(1),
 	.MCD_RST_N(MCD_RST_N),
@@ -1055,7 +1056,7 @@ always @(posedge clk_sys) begin
 	end
 
 	old_ready <= cart_hdr_ready;
-	if(~old_ready & cart_hdr_ready) begin
+	if(status[49] & ~old_ready & cart_hdr_ready) begin
 		region_set <= 1;
 		if(hdr_u) region_req <= 1;
 		else if(hdr_j) region_req <= 0;
@@ -1211,8 +1212,8 @@ always @(posedge clk_sys) begin
 		SERJOYSTICK_IN[5] <= USER_IN[6];//c TR GPIO7			
 		SERJOYSTICK_IN[6] <= USER_IN[4];//  TH
 		SERJOYSTICK_IN[7] <= 0;
-		SER_OPT[0] <= status[4];
-		SER_OPT[1] <= ~status[4];
+		SER_OPT[0] <= ~status[4];
+		SER_OPT[1] <= status[4];
 		USER_OUT[1] <= SERJOYSTICK_OUT[0];
 		USER_OUT[0] <= SERJOYSTICK_OUT[1];
 		USER_OUT[5] <= SERJOYSTICK_OUT[2];
