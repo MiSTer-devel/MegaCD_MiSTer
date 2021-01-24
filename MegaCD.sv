@@ -237,8 +237,9 @@ localparam CONF_STR = {
 	"MegaCD;;",
 	"S0,CUE,Insert Disk;",
 	"-;",
-	"O67,Region,JP,US,EU;",
-	"oH,Auto Cart Region,Disabled,Header;",
+	"h6O67,Region,Auto(JP),JP,US,EU;",
+	"h7O67,Region,Auto(US),JP,US,EU;",
+	"h8O67,Region,Auto(EU),JP,US,EU;",
 	"-;",
 	"C,Cheats;",
 	"H5OO,Cheats Enabled,Yes,No;",
@@ -298,7 +299,7 @@ localparam CONF_STR = {
 };
 
 
-wire [15:0] status_menumask = {~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
+wire [15:0] status_menumask = {region,!region,~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
 wire  [1:0] buttons;
 wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
@@ -351,8 +352,8 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.new_vmode(new_vmode),
 
 	.status(status),
-	.status_in({status[63:8],region_req,status[5:0]}),
-	.status_set(region_set),
+	.status_in({status[63:8],2'b00,status[5:0]}),
+	.status_set(region_reset),
 	.status_menumask(status_menumask),
 
 	.ioctl_download(ioctl_download),
@@ -525,7 +526,7 @@ gen gen
 	.EXT_SR(MCD_SR),
 
 	.LOADING(rom_download),
-	.EXPORT(|status[7:6]),
+	.EXPORT(|region),
 	.PAL(PAL),
 
 	.DAC_LDATA(AUDIO_L),
@@ -961,7 +962,7 @@ end
 
 
 /////////////////////////////////////////////////////////////
-wire PAL = status[7];
+wire PAL = region[1];
 
 reg new_vmode;
 always @(posedge clk_sys) begin
@@ -1088,48 +1089,46 @@ lightgun lightgun
 );
 
 reg  [1:0] region_req;
-reg        region_set = 0;
-
+reg        region_reset;
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
 always @(posedge clk_sys) begin
-	reg old_state, old_ready = 0;
-	old_state <= ps2_key[10];
+	reg old_state = 0;
 
+	if(reset) region_reset <= 0;
+
+	old_state <= ps2_key[10];
 	if(old_state != ps2_key[10]) begin
 		casex(code)
-			'h005: begin region_req <= 0; region_set <= pressed; end // F1
-			'h006: begin region_req <= 1; region_set <= pressed; end // F2
-			'h004: begin region_req <= 2; region_set <= pressed; end // F3
+			'h005: begin region_req <= 0; region_reset <= pressed; end // F1
+			'h006: begin region_req <= 1; region_reset <= pressed; end // F2
+			'h004: begin region_req <= 2; region_reset <= pressed; end // F3
 		endcase
 	end
 
-	old_ready <= cart_hdr_ready;
-	if(status[49] & ~old_ready & cart_hdr_ready) begin
-		region_set <= 1;
-		if(hdr_u) region_req <= 1;
-		else if(hdr_j) region_req <= 0;
-		else region_req <= 2;
-	end
-
-	if(old_ready & ~cart_hdr_ready) region_set <= 0;
-end
-
-reg cart_hdr_ready = 0;
-reg hdr_j=0,hdr_u=0;
-always @(posedge clk_sys) begin
-	reg old_download;
-	old_download <= rom_download;
-
-	if(~old_download && rom_download) {hdr_j,hdr_u,cart_hdr_ready} <= 0;
-	if(old_download && ~rom_download) cart_hdr_ready <= 0;
-
 	if(ioctl_wr & rom_download) begin
 		if(ioctl_addr == 'h1F0) begin
-			if(ioctl_data[7:0] == "J") hdr_j <= 1;
-			else if(ioctl_data[7:0] == "U") hdr_u <= 1;
-			cart_hdr_ready <= 1;
+			if(ioctl_data[7:0] == "J") region_req <= 0;
+			else if(ioctl_data[7:0] == "U") region_req <= 1;
+			else region_req <= 2;
 		end
+	end
+end
+
+wire [1:0] region_new = status[7:6] ? (status[7:6] - 1'd1) : region_req;
+
+reg  [1:0] region;
+reg        region_set = 0;
+always @(posedge clk_sys) begin
+	reg [15:0] to = 0;
+	
+	region <= region_new;
+	if(region != region_new) to <= 0;
+	
+	region_set <= 0;
+	if(~&to) begin
+		to <= to + 1'd1;
+		region_set <= 1;
 	end
 end
 
