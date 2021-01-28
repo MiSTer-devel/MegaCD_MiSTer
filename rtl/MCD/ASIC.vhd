@@ -1250,19 +1250,17 @@ begin
 							SW <= std_logic_vector( unsigned(SW) + 1 );
 						end if;
 						
-						if TIMER /= x"00" then
-							TIMER <= TIMER - 1;
-						else
+						if TIMER_SET = '1' then
 							TIMER <= unsigned(TM);
-							if IEN(3) = '1' and INT_PEND(3) = '0' then
+							TIMER_SET <= '0';
+						elsif TIMER /= x"00" then
+							TIMER <= TIMER - 1;
+							if TIMER = 1 and IEN(3) = '1' and INT_PEND(3) = '0' then
 								INT_PEND(3) <= '1';
 							end if;
+						else
+							TIMER <= unsigned(TM);
 						end if;
-					end if;
-					
-					if TIMER_SET = '1' then
-						TIMER <= unsigned(TM);
-						TIMER_SET <= '0';
 					end if;
 				end if;
 			
