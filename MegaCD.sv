@@ -40,8 +40,8 @@ module emu
 	output        CE_PIXEL,
 
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output  [7:0] VIDEO_ARX,
-	output  [7:0] VIDEO_ARY,
+	output [11:0] VIDEO_ARX,
+	output [11:0] VIDEO_ARY,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -51,6 +51,34 @@ module emu
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
+	output        VGA_SCALER, // Force VGA scaler
+
+`ifdef USE_FB
+	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// FB_FORMAT:
+	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
+	//    [3]   : 0=16bits 565 1=16bits 1555
+	//    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
+	//
+	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
+	output        FB_EN,
+	output  [4:0] FB_FORMAT,
+	output [11:0] FB_WIDTH,
+	output [11:0] FB_HEIGHT,
+	output [31:0] FB_BASE,
+	output [13:0] FB_STRIDE,
+	input         FB_VBL,
+	input         FB_LL,
+	output        FB_FORCE_BLANK,
+
+	// Palette control for 8bit modes.
+	// Ignored for other video modes.
+	output        FB_PAL_CLK,
+	output  [7:0] FB_PAL_ADDR,
+	output [23:0] FB_PAL_DOUT,
+	input  [23:0] FB_PAL_DIN,
+	output        FB_PAL_WR,
+`endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -68,7 +96,7 @@ module emu
 	input         CLK_AUDIO, // 24.576 MHz
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
-	output        AUDIO_S, // 1 - signed audio samples, 0 - unsigned
+	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
 	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
 
 	//ADC
@@ -81,6 +109,7 @@ module emu
 	output        SD_CS,
 	input         SD_CD,
 
+`ifdef USE_DDRAM
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -93,7 +122,9 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
+`endif
 
+`ifdef USE_SDRAM
 	//SDRAM interface with lower latency
 	output        SDRAM_CLK,
 	output        SDRAM_CKE,
@@ -106,6 +137,20 @@ module emu
 	output        SDRAM_nCAS,
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
+`endif
+
+`ifdef DUAL_SDRAM
+	//Secondary SDRAM
+	input         SDRAM2_EN,
+	output        SDRAM2_CLK,
+	output [12:0] SDRAM2_A,
+	output  [1:0] SDRAM2_BA,
+	inout  [15:0] SDRAM2_DQ,
+	output        SDRAM2_nCS,
+	output        SDRAM2_nCAS,
+	output        SDRAM2_nRAS,
+	output        SDRAM2_nWE,
+`endif
 
 	input         UART_CTS,
 	output        UART_RTS,
@@ -130,41 +175,39 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign BUTTONS   = {bk_reload, 1'b0};
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
+wire [1:0] ar = status[50:49];
+wire [7:0] arx,ary;
+
 always_comb begin
-	if (status[10]) begin
-		VIDEO_ARX = 8'd16;
-		VIDEO_ARY = 8'd9;
-	end else begin
-		case(res) // {V30, H40}
-			2'b00: begin // 256 x 224
-				VIDEO_ARX = 8'd64;
-				VIDEO_ARY = 8'd49;
-			end
+	case(res) // {V30, H40}
+		2'b00: begin // 256 x 224
+			arx = 8'd64;
+			ary = 8'd49;
+		end
 
-			2'b01: begin // 320 x 224
-				VIDEO_ARX = status[30] ? 8'd10: 8'd64;
-				VIDEO_ARY = status[30] ? 8'd7 : 8'd49;
-			end
+		2'b01: begin // 320 x 224
+			arx = status[30] ? 8'd10: 8'd64;
+			ary = status[30] ? 8'd7 : 8'd49;
+		end
 
-			2'b10: begin // 256 x 240
-				VIDEO_ARX = 8'd128;
-				VIDEO_ARY = 8'd105;
-			end
+		2'b10: begin // 256 x 240
+			arx = 8'd128;
+			ary = 8'd105;
+		end
 
-			2'b11: begin // 320 x 240
-				VIDEO_ARX = status[30] ? 8'd4 : 8'd128;
-				VIDEO_ARY = status[30] ? 8'd3 : 8'd105;
-			end
-		endcase
-	end
+		2'b11: begin // 320 x 240
+			arx = status[30] ? 8'd4 : 8'd128;
+			ary = status[30] ? 8'd3 : 8'd105;
+		end
+	endcase
 end
 
-//assign VIDEO_ARX = status[10] ? 8'd16 : ((status[30] && wide_ar) ? 8'd10 : 8'd64);
-//assign VIDEO_ARY = status[10] ? 8'd9  : ((status[30] && wide_ar) ? 8'd7  : 8'd49);
+assign VIDEO_ARX  = (!ar) ? arx : (ar - 1'd1);
+assign VIDEO_ARY  = (!ar) ? ary : 12'd0;
+assign VGA_SCALER = 0;
 
-assign AUDIO_S = 1;
+assign AUDIO_S   = 1;
 assign AUDIO_MIX = 0;
-
 assign LED_POWER = {1'b1,MCD_LED_GREEN};
 assign LED_DISK  = {1'b1,MCD_LED_RED};
 assign LED_USER  = rom_download | sav_pending;
@@ -182,14 +225,21 @@ pll pll
 	.locked(locked)
 );
 
+// Status Bit Map:
+//             Upper                             Lower              
+// 0         1         2         3          4         5         6   
+// 01234567890123456789012345678901 23456789012345678901234567890123
+// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
+// XXXXXXXXX  XXXXXXXXXXXXXXXX  XXX  XXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"MegaCD;;",
 	"S0,CUE,Insert Disk;",
 	"-;",
-	"O67,Region,JP,US,EU;",
-	"oH,Auto Cart Region,Disabled,Header;",
+	"h6O67,Region,Auto(JP),JP,US,EU;",
+	"h7O67,Region,Auto(US),JP,US,EU;",
+	"h8O67,Region,Auto(EU),JP,US,EU;",
 	"-;",
 	"C,Cheats;",
 	"H5OO,Cheats Enabled,Yes,No;",
@@ -202,7 +252,7 @@ localparam CONF_STR = {
 
 	"P1,Audio & Video;",
 	"P1-;",
-	"P1OA,Aspect Ratio,4:3,16:9;",
+	"P1oHI,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"P1OU,320x224 Aspect,Original,Corrected;",
 	"P1o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"P1-;",
@@ -249,7 +299,7 @@ localparam CONF_STR = {
 };
 
 
-wire [15:0] status_menumask = {~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
+wire [15:0] status_menumask = {region,!region,~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
 wire  [1:0] buttons;
 wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
@@ -302,8 +352,8 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.new_vmode(new_vmode),
 
 	.status(status),
-	.status_in({status[63:8],region_req,status[5:0]}),
-	.status_set(region_set),
+	.status_in({status[63:8],2'b00,status[5:0]}),
+	.status_set(region_reset),
 	.status_menumask(status_menumask),
 
 	.ioctl_download(ioctl_download),
@@ -476,7 +526,7 @@ gen gen
 	.EXT_SR(MCD_SR),
 
 	.LOADING(rom_download),
-	.EXPORT(|status[7:6]),
+	.EXPORT(|region),
 	.PAL(PAL),
 
 	.DAC_LDATA(AUDIO_L),
@@ -912,7 +962,7 @@ end
 
 
 /////////////////////////////////////////////////////////////
-wire PAL = status[7];
+wire PAL = region[1];
 
 reg new_vmode;
 always @(posedge clk_sys) begin
@@ -1039,48 +1089,46 @@ lightgun lightgun
 );
 
 reg  [1:0] region_req;
-reg        region_set = 0;
-
+reg        region_reset;
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
 always @(posedge clk_sys) begin
-	reg old_state, old_ready = 0;
-	old_state <= ps2_key[10];
+	reg old_state = 0;
 
+	if(reset) region_reset <= 0;
+
+	old_state <= ps2_key[10];
 	if(old_state != ps2_key[10]) begin
 		casex(code)
-			'h005: begin region_req <= 0; region_set <= pressed; end // F1
-			'h006: begin region_req <= 1; region_set <= pressed; end // F2
-			'h004: begin region_req <= 2; region_set <= pressed; end // F3
+			'h005: begin region_req <= 0; region_reset <= pressed; end // F1
+			'h006: begin region_req <= 1; region_reset <= pressed; end // F2
+			'h004: begin region_req <= 2; region_reset <= pressed; end // F3
 		endcase
 	end
 
-	old_ready <= cart_hdr_ready;
-	if(status[49] & ~old_ready & cart_hdr_ready) begin
-		region_set <= 1;
-		if(hdr_u) region_req <= 1;
-		else if(hdr_j) region_req <= 0;
-		else region_req <= 2;
-	end
-
-	if(old_ready & ~cart_hdr_ready) region_set <= 0;
-end
-
-reg cart_hdr_ready = 0;
-reg hdr_j=0,hdr_u=0;
-always @(posedge clk_sys) begin
-	reg old_download;
-	old_download <= rom_download;
-
-	if(~old_download && rom_download) {hdr_j,hdr_u,cart_hdr_ready} <= 0;
-	if(old_download && ~rom_download) cart_hdr_ready <= 0;
-
 	if(ioctl_wr & rom_download) begin
 		if(ioctl_addr == 'h1F0) begin
-			if(ioctl_data[7:0] == "J") hdr_j <= 1;
-			else if(ioctl_data[7:0] == "U") hdr_u <= 1;
-			cart_hdr_ready <= 1;
+			if(ioctl_data[7:0] == "J") region_req <= 0;
+			else if(ioctl_data[7:0] == "U") region_req <= 1;
+			else region_req <= 2;
 		end
+	end
+end
+
+wire [1:0] region_new = status[7:6] ? (status[7:6] - 1'd1) : region_req;
+
+reg  [1:0] region;
+reg        region_set = 0;
+always @(posedge clk_sys) begin
+	reg [15:0] to = 0;
+	
+	region <= region_new;
+	if(region != region_new) to <= 0;
+	
+	region_set <= 0;
+	if(~&to) begin
+		to <= to + 1'd1;
+		region_set <= 1;
 	end
 end
 

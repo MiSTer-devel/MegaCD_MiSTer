@@ -647,6 +647,7 @@ always @(posedge MCLK) begin
 		TIME_SEL <= 0;
 
 		RFS <= 0;
+		//DBG_HOOK <= '0;
 		//rfs_pend <= 0;
 	end
 	else begin
