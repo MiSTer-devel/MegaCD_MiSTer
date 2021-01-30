@@ -469,6 +469,9 @@ wire        GEN_PAGE_CE_N;
 wire [15:0] GEN_MEM_DO;
 wire        GEN_MEM_BUSY;
 
+wire [15:0] GEN_AUDL;
+wire [15:0] GEN_AUDR;
+
 wire [7:0] color_lut[16] = '{
 	8'd0,   8'd27,  8'd49,  8'd71,
 	8'd87,  8'd103, 8'd119, 8'd130,
@@ -522,15 +525,12 @@ gen gen
 	.TIME_N(GEN_PAGE_CE_N),
 	.TIME_DI(GEN_PAGE_DI),
 
-	.EXT_SL(MCD_SL),
-	.EXT_SR(MCD_SR),
-
 	.LOADING(rom_download),
 	.EXPORT(|region),
 	.PAL(PAL),
 
-	.DAC_LDATA(AUDIO_L),
-	.DAC_RDATA(AUDIO_R),
+	.DAC_LDATA(GEN_AUDL),
+	.DAC_RDATA(GEN_AUDR),
 
 	.RED(r),
 	.GREEN(g),
@@ -697,22 +697,20 @@ MCD MCD
 	.GG_AVAILABLE(gg_available2)
 );
 
-wire [15:0] MCD_SL;
-wire [15:0] MCD_SR;
+reg [15:0] aud_l, aud_r;
+always @(posedge clk_sys) begin
+	reg [15:0] mcd_l, mcd_r;
+	
+	mcd_l <= ({16{EN_MCD_PCM}} & {MCD_PCM_SL[15],MCD_PCM_SL[15:1]}) + ({16{EN_MCD_CDDA}} & {MCD_CDDA_SL[15],MCD_CDDA_SL[15:1]});
+	mcd_r <= ({16{EN_MCD_PCM}} & {MCD_PCM_SR[15],MCD_PCM_SR[15:1]}) + ({16{EN_MCD_CDDA}} & {MCD_CDDA_SR[15],MCD_CDDA_SR[15:1]});
 
-SND_MIX mcd_mix
-(
-	.CH0_R(MCD_PCM_SR),
-	.CH0_L(MCD_PCM_SL),
-	.CH0_EN(EN_MCD_PCM),
-	
-	.CH1_R(MCD_CDDA_SR),
-	.CH1_L(MCD_CDDA_SL),
-	.CH1_EN(EN_MCD_CDDA),
-	
-	.OUT_R(MCD_SR),
-	.OUT_L(MCD_SL)
-);
+	aud_l <= {GEN_AUDL[15],GEN_AUDL[15:1]} + {mcd_l[15],mcd_l[15:1]};
+	aud_r <= {GEN_AUDR[15],GEN_AUDR[15:1]} + {mcd_r[15],mcd_r[15:1]};
+end
+
+assign AUDIO_L = aud_l;
+assign AUDIO_R = aud_r;
+
 
 //ROM/RAM Cart
 wire [15:0] CART_DO;

@@ -7,7 +7,6 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/cache_2way.sv
 set_global_assignment -name VHDL_FILE rtl/bram.vhd
 set_global_assignment -name VHDL_FILE rtl/mlab.vhd
 set_global_assignment -name VHDL_FILE rtl/CEGen.vhd
-set_global_assignment -name VHDL_FILE rtl/snd_mix.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cofi.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cheatcodes.sv
 set_global_assignment -name VERILOG_FILE rtl/hps_ext.v

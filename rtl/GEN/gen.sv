@@ -58,9 +58,6 @@ module gen
 	input         CART_N,
 	input         DISK_N,
 	
-	input  [15:0] EXT_SL,
-	input  [15:0] EXT_SR,
-
 	input   [1:0] LPF_MODE,
 	input         ENABLE_FM,
 	input         ENABLE_PSG,
@@ -1145,10 +1142,8 @@ wire signed [15:0] FM_right;
 wire signed [15:0] FM_left;
 wire signed [15:0] FM_LPF_right;
 wire signed [15:0] FM_LPF_left;
-wire [15:0] SL;
-wire [15:0] SR;
-wire signed [15:0] PRE_LPF_L;
-wire signed [15:0] PRE_LPF_R;
+wire signed [15:0] SL;
+wire signed [15:0] SR;
 
 jt12 fm
 (
@@ -1204,26 +1199,12 @@ jt12_genmix genmix
 	.snd_right(SR)
 );
 
-SND_MIX mix
-(
-	.CH0_R(SR),
-	.CH0_L(SL),
-	.CH0_EN(1),
-	
-	.CH1_R(EXT_SR),
-	.CH1_L(EXT_SL),
-	.CH1_EN(1),
-	
-	.OUT_R(PRE_LPF_R),
-	.OUT_L(PRE_LPF_L)
-);
-
 genesis_lpf lpf_right
 (
 	.clk(MCLK),
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
-	.in(PRE_LPF_R),
+	.in(SR),
 	.out(DAC_RDATA)
 );
 
@@ -1232,7 +1213,7 @@ genesis_lpf lpf_left
 	.clk(MCLK),
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
-	.in(PRE_LPF_L),
+	.in(SL),
 	.out(DAC_LDATA)
 );
 
