@@ -61,6 +61,11 @@ module gen
 	input   [1:0] LPF_MODE,
 	input         ENABLE_FM,
 	input         ENABLE_PSG,
+
+	input  [15:0] EXT_SL,
+	input  [15:0] EXT_SR,
+	input         EXT_EN,
+
 	output [15:0] DAC_LDATA,
 	output [15:0] DAC_RDATA,
 
@@ -1199,12 +1204,26 @@ jt12_genmix genmix
 	.snd_right(SR)
 );
 
+reg [15:0] mix_l, mix_r;
+always @(posedge MCLK) begin
+	reg [15:0] mcd_l, mcd_r;
+	
+	if(EXT_EN) begin
+		mix_l <= {SL[15],SL[15:1]} + {EXT_SL[15],EXT_SL[15:1]};
+		mix_r <= {SR[15],SR[15:1]} + {EXT_SR[15],EXT_SR[15:1]};
+	end
+	else begin
+		mix_l <= SL;
+		mix_r <= SR;
+	end
+end
+
 genesis_lpf lpf_right
 (
 	.clk(MCLK),
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
-	.in(SR),
+	.in(mix_r),
 	.out(DAC_RDATA)
 );
 
@@ -1213,7 +1232,7 @@ genesis_lpf lpf_left
 	.clk(MCLK),
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
-	.in(SL),
+	.in(mix_l),
 	.out(DAC_LDATA)
 );
 

@@ -230,7 +230,7 @@ pll pll
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXX  XXXXXXXXXXXXXXXX  XXX  XXXXXXXXXXXXXXXXXX
+// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX  XXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -261,6 +261,7 @@ localparam CONF_STR = {
 	"P1OV,Sprite Limit,Normal,High;",
 	"P1-;",
 	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
+	"P1OR,CD Audio,Unfiltered,Filtered;",
 	"P1O8,FM Chip,YM2612,YM3438;",
 	"P1ON,HiFi PCM,No,Yes;",
 
@@ -529,6 +530,10 @@ gen gen
 	.EXPORT(|region),
 	.PAL(PAL),
 
+	.EXT_SL(mcd_l),
+	.EXT_SR(mcd_r),
+	.EXT_EN(status[27]),
+
 	.DAC_LDATA(GEN_AUDL),
 	.DAC_RDATA(GEN_AUDR),
 
@@ -698,14 +703,19 @@ MCD MCD
 );
 
 reg [15:0] aud_l, aud_r;
+reg [15:0] mcd_l, mcd_r;
 always @(posedge clk_sys) begin
-	reg [15:0] mcd_l, mcd_r;
-	
 	mcd_l <= ({16{EN_MCD_PCM}} & {MCD_PCM_SL[15],MCD_PCM_SL[15:1]}) + ({16{EN_MCD_CDDA}} & {MCD_CDDA_SL[15],MCD_CDDA_SL[15:1]});
 	mcd_r <= ({16{EN_MCD_PCM}} & {MCD_PCM_SR[15],MCD_PCM_SR[15:1]}) + ({16{EN_MCD_CDDA}} & {MCD_CDDA_SR[15],MCD_CDDA_SR[15:1]});
 
-	aud_l <= {GEN_AUDL[15],GEN_AUDL[15:1]} + {mcd_l[15],mcd_l[15:1]};
-	aud_r <= {GEN_AUDR[15],GEN_AUDR[15:1]} + {mcd_r[15],mcd_r[15:1]};
+	if(~status[27]) begin
+		aud_l <= {GEN_AUDL[15],GEN_AUDL[15:1]} + {mcd_l[15],mcd_l[15:1]};
+		aud_r <= {GEN_AUDR[15],GEN_AUDR[15:1]} + {mcd_r[15],mcd_r[15:1]};
+	end
+	else begin
+		aud_l <= GEN_AUDL;
+		aud_r <= GEN_AUDR;
+	end
 end
 
 assign AUDIO_L = aud_l;
