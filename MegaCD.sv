@@ -53,6 +53,9 @@ module emu
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
 
+	input  [11:0] HDMI_WIDTH,
+	input  [11:0] HDMI_HEIGHT,
+
 `ifdef USE_FB
 	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
@@ -175,6 +178,14 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign BUTTONS   = {bk_reload, 1'b0};
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
+assign LED_DISK  = {1'b1,MCD_LED_RED};
+assign LED_POWER = {1'b1,MCD_LED_GREEN};
+assign LED_USER  = rom_download | sav_pending;
+
+assign VGA_SCALER= 0;
+
+assign AUDIO_S   = 1;
+assign AUDIO_MIX = 0;
 wire [1:0] ar = status[50:49];
 wire [7:0] arx,ary;
 
@@ -202,16 +213,25 @@ always_comb begin
 	endcase
 end
 
-assign VIDEO_ARX  = (!ar) ? arx : (ar - 1'd1);
-assign VIDEO_ARY  = (!ar) ? ary : 12'd0;
-assign VGA_SCALER = 0;
+wire       vcrop_en = status[32];
+wire [3:0] vcopt    = status[54:51];
+reg        en216p;
+reg  [4:0] voff;
+always @(posedge CLK_VIDEO) begin
+	en216p <= ((HDMI_WIDTH == 1920) && (HDMI_HEIGHT == 1080) && !forced_scandoubler && !scale);
+	voff <= (vcopt < 6) ? {vcopt,1'b0} : ({vcopt,1'b0} - 5'd24);
+end
 
-assign AUDIO_S   = 1;
-assign AUDIO_MIX = 0;
-assign LED_POWER = {1'b1,MCD_LED_GREEN};
-assign LED_DISK  = {1'b1,MCD_LED_RED};
-assign LED_USER  = rom_download | sav_pending;
-
+wire vga_de;
+video_crop video_crop
+(
+	.*,
+	.VGA_DE_IN(vga_de),
+	.ARX((!ar) ? arx : (ar - 1'd1)),
+	.ARY((!ar) ? ary : 12'd0),
+	.CROP_SIZE((en216p & vcrop_en) ? 10'd216 : 10'd0),
+	.CROP_OFF(voff)
+);
 
 ///////////////////////////////////////////////////
 wire clk_sys, clk_ram, locked;
@@ -230,7 +250,7 @@ pll pll
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX  XXXXXXXXXXXXXXXXXX
+// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX XXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -256,6 +276,9 @@ localparam CONF_STR = {
 	"P1OU,320x224 Aspect,Original,Corrected;",
 	"P1o13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"P1-;",
+	"d9P1o0,Vertical Crop,Disabled,216p(5x);",
+	"d9P1oJM,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
+	"P1- ;",
 	"P1OT,Border,No,Yes;",
 	"P1oFG,Composite Blend,Off,On,Adaptive;",
 	"P1OV,Sprite Limit,Normal,High;",
@@ -300,7 +323,7 @@ localparam CONF_STR = {
 };
 
 
-wire [15:0] status_menumask = {region,!region,~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
+wire [15:0] status_menumask = {en216p,region,!region,~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
 wire  [1:0] buttons;
 wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
@@ -1047,6 +1070,7 @@ video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 	.mono(0),
 
+	.VGA_DE(vga_de),
 	.R((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[0]}} : red),
 	.G((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[1]}} : green),
 	.B((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[2]}} : blue),
