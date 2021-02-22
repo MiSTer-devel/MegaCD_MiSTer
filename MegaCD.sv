@@ -40,8 +40,9 @@ module emu
 	output        CE_PIXEL,
 
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output [11:0] VIDEO_ARX,
-	output [11:0] VIDEO_ARY,
+	//if VIDEO_ARX[12] or VIDEO_ARY[12] is set then [11:0] contains scaled size instead of aspect ratio.
+	output [12:0] VIDEO_ARX,
+	output [12:0] VIDEO_ARY,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -223,14 +224,15 @@ always @(posedge CLK_VIDEO) begin
 end
 
 wire vga_de;
-video_crop video_crop
+video_freak video_freak
 (
 	.*,
 	.VGA_DE_IN(vga_de),
 	.ARX((!ar) ? arx : (ar - 1'd1)),
 	.ARY((!ar) ? ary : 12'd0),
 	.CROP_SIZE((en216p & vcrop_en) ? 10'd216 : 10'd0),
-	.CROP_OFF(voff)
+	.CROP_OFF(voff),
+	.SCALE(status[56:55])
 );
 
 ///////////////////////////////////////////////////
@@ -250,7 +252,7 @@ pll pll
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX XXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX XXXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -278,6 +280,7 @@ localparam CONF_STR = {
 	"P1-;",
 	"d9P1o0,Vertical Crop,Disabled,216p(5x);",
 	"d9P1oJM,Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
+	"P1oNO,Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"P1- ;",
 	"P1OT,Border,No,Yes;",
 	"P1oFG,Composite Blend,Off,On,Adaptive;",
