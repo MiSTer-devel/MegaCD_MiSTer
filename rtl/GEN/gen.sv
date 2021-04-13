@@ -89,6 +89,7 @@ module gen
 	output        VBL,
 	output        CE_PIX,
 	output        TRANSP_DETECT,
+	input         CRAM_DOTS,
 	input         BORDER,
 
 	output        INTERLACE,
@@ -425,6 +426,7 @@ vdp vdp
 //	.VRAM_SPEED(1),
 //	.VSCROLL_BUG(0),
 	.BORDER_EN(BORDER),
+	.CRAM_DOTS(CRAM_DOTS),
 	.OBJ_LIMIT_HIGH_EN(OBJ_LIMIT_HIGH),
 
 	.FIELD_OUT(FIELD),
