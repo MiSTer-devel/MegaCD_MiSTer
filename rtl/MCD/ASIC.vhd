@@ -242,9 +242,9 @@ architecture rtl of ASIC is
 	signal HW 							: std_logic_vector(8 downto 0);
 	signal VW 							: std_logic_vector(7 downto 0);
 	signal TVBA 						: std_logic_vector(17 downto 3);
---	signal STA 							: std_logic_vector(6 downto 1);
---	signal SAOR 						: std_logic;
---	signal SBA 							: reg64x16_t;
+	signal STA 							: std_logic_vector(6 downto 1);
+	signal SAOR 						: std_logic;
+	signal SBA 							: reg64x16_t;
 	signal HOCK 						: std_logic;
 	signal CDDS 						: std_logic_vector(39 downto 0);
 	signal CDDC 						: std_logic_vector(39 downto 0);
@@ -274,7 +274,7 @@ architecture rtl of ASIC is
 	signal HOCK_OLD 					: std_logic;
 	signal CD_SC_WR_OLD 				: std_logic;
 	signal CDD_STAT_RECEIVED 		: std_logic;
---	signal SC_CNT 						: unsigned(5 downto 0);
+	signal SC_CNT 						: unsigned(5 downto 0);
 	signal CDC_HRD 					: std_logic;
 	signal MAIN_CPU_CDC_READ 		: std_logic;
 	signal SUB_CPU_CDC_READ 		: std_logic;
@@ -770,6 +770,7 @@ begin
 				
 	process( RST_N, CLK )
 	variable NEW_STA : std_logic_vector(6 downto 0);
+	variable SC_W_POS : unsigned(5 downto 0);
 	begin
 		if RST_N = '0' then
 			S68K_REG_DTACK_N <= '1';
@@ -799,9 +800,9 @@ begin
 			TVBA <= (others => '0');
 			CDDS <= x"F000000000";
 			CDDC <= x"FFFFFFFFFF";
---			STA <= (others => '0');
---			SAOR <= '0';
---			SBA <= (others => (others => '0'));
+			STA <= (others => '0');
+			SAOR <= '0';
+			SBA <= (others => (others => '0'));
 			SUB_RST_EXEC <= '0';
 			DMA_ADDR_SET <= '0';
 			VW_SET <= '0';
@@ -1189,8 +1190,8 @@ begin
 							when "0110011" =>			--$FF8066 Trace vector base address
 								S68K_REG_DO <= TVBA(17 downto 3) & "0";
 							when "0110100" =>			--$FF8068 Subcode address
-								S68K_REG_DO <= (others => '0');
---								S68K_REG_DO <= "00000000" & SAOR & STA & "0";
+--								S68K_REG_DO <= (others => '0');
+								S68K_REG_DO <= "00000000" & SAOR & STA & "0";
 							when others =>
 								S68K_REG_DO <= S68K_MDR;
 						end case;
@@ -1201,32 +1202,36 @@ begin
 				end if;
 			
 				--Subcode
---				if (INT_ACK(6) = '1' or IEN(6) = '0') and INT_PEND(6) = '1' then
---					INT_PEND(6) <= '0';
---				end if;
---				
---				CD_SC_WR_OLD <= CD_SC_WR;
---				if CD_SC_WR = '1' and CD_SC_WR_OLD = '0' then
---					NEW_STA := std_logic_vector( (SAOR&unsigned(STA)) + 49 );
---					
---					SBA(to_integer(unsigned(NEW_STA(5 downto 0)) + SC_CNT)) <= CD_DI(7 downto 0)&CD_DI(15 downto 8);
---					SC_CNT <= SC_CNT + 1;
---					if SC_CNT = 48 then
---						SC_CNT <= (others => '0');
---						
---						STA <= NEW_STA(5 downto 0);
---						SAOR <= NEW_STA(6);
---						
---						if IEN(6) = '1' then
---							INT_PEND(6) <= '1';
---						end if;
---					end if;
---				end if;
+				if (INT_ACK(6) = '1' or IEN(6) = '0') and INT_PEND(6) = '1' then
+					INT_PEND(6) <= '0';
+				end if;
+				
+				CD_SC_WR_OLD <= CD_SC_WR;
+				if CD_SC_WR = '1' and CD_SC_WR_OLD = '0' then
+					NEW_STA := std_logic_vector( (SAOR&unsigned(STA)) + 49);
+					SC_W_POS := unsigned(NEW_STA(5 downto 0)) + SC_CNT;
+					if SC_W_POS >= 64 then
+						SC_W_POS := SC_W_POS - 64;
+						SAOR <= '1';
+					end if;
+					SBA(to_integer(SC_W_POS)) <= CD_DI(7 downto 0)&CD_DI(15 downto 8);
+					SC_CNT <= SC_CNT + 1;
+					if SC_CNT = 48 then
+						SC_CNT <= (others => '0');
+						
+						STA <= NEW_STA(5 downto 0);
+						SAOR <= '0'; 
+						
+						if IEN(6) = '1' then
+							INT_PEND(6) <= '1';
+						end if;
+					end if;
+				end if;
 			
 				if S68K_SC_SEL = '1' and S68K_REG_DTACK_N = '1' then-- and PCM_S68K_HALT = '0'
 					if S68K_RNW = '1' then
-						S68K_REG_DO <= (others => '0');
---						S68K_REG_DO <= SBA(to_integer(unsigned(S68K_A(6 downto 1))));
+--						S68K_REG_DO <= (others => '0');
+						S68K_REG_DO <= SBA(to_integer(unsigned(S68K_A(6 downto 1))));
 					end if;
 					S68K_REG_DTACK_N <= '0';
 				elsif S68K_REG_DTACK_N = '0' and S68K_LDS_N = '1' and S68K_UDS_N = '1' then
