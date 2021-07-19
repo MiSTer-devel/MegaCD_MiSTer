@@ -56,8 +56,9 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
 
-`ifdef USE_FB
+`ifdef MISTER_FB
 	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
@@ -75,6 +76,7 @@ module emu
 	input         FB_LL,
 	output        FB_FORCE_BLANK,
 
+`ifdef MISTER_FB_PALETTE
 	// Palette control for 8bit modes.
 	// Ignored for other video modes.
 	output        FB_PAL_CLK,
@@ -82,6 +84,7 @@ module emu
 	output [23:0] FB_PAL_DOUT,
 	input  [23:0] FB_PAL_DIN,
 	output        FB_PAL_WR,
+`endif
 `endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
@@ -113,7 +116,6 @@ module emu
 	output        SD_CS,
 	input         SD_CD,
 
-`ifdef USE_DDRAM
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -126,9 +128,7 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
-`endif
 
-`ifdef USE_SDRAM
 	//SDRAM interface with lower latency
 	output        SDRAM_CLK,
 	output        SDRAM_CKE,
@@ -141,10 +141,10 @@ module emu
 	output        SDRAM_nCAS,
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
-`endif
 
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
 	input         SDRAM2_EN,
 	output        SDRAM2_CLK,
 	output [12:0] SDRAM2_A,
@@ -184,6 +184,7 @@ assign LED_POWER = {1'b1,MCD_LED_GREEN};
 assign LED_USER  = rom_download | sav_pending;
 
 assign VGA_SCALER= 0;
+assign HDMI_FREEZE = 0;
 
 assign AUDIO_S   = 1;
 assign AUDIO_MIX = 0;
@@ -339,13 +340,13 @@ wire [15:0] ioctl_data;
 wire  [7:0] ioctl_index;
 reg         ioctl_wait;
 
-reg  [31:0] sd_lba;
+reg  [31:0] sd_lba[1];
 reg         sd_rd = 0;
 reg         sd_wr = 0;
 wire        sd_ack;
 wire  [7:0] sd_buff_addr;
 wire [15:0] sd_buff_dout;
-wire [15:0] sd_buff_din = sd_lba[10:4] ? tmpram_sd_buff_data : bram_sd_buff_data;
+wire [15:0] sd_buff_din[1];
 wire        sd_buff_wr;
 wire        img_mounted;
 wire        img_readonly;
@@ -361,12 +362,12 @@ wire [1:0] gun_mode = status[41:40];
 wire       gun_btn_mode = status[42];
 wire       gun_type = ~status[45];
 
-hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
+assign sd_buff_din[0] = sd_lba[0][10:4] ? tmpram_sd_buff_data : bram_sd_buff_data;
+
+hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
-
-	.conf_str(CONF_STR),
 
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),
@@ -877,9 +878,9 @@ dpram_dif #(13,8,12,16) bram
 	.wren_a(PIER_QUIRK ? m95_we : MCD_BRAM_WE),
 	.q_a(MCD_BRAM_DI),
 
-	.address_b({sd_lba[3:0],sd_buff_addr}),
+	.address_b({sd_lba[0][3:0],sd_buff_addr}),
 	.data_b(sd_buff_dout),
-	.wren_b(sd_buff_wr & sd_ack & !sd_lba[10:4]),
+	.wren_b(sd_buff_wr & sd_ack & !sd_lba[0][10:4]),
 	.q_b(bram_sd_buff_data)
 );
 
@@ -898,7 +899,7 @@ dpram_dif #(9,8,8,16) tmpram
 	.q_a(tmpram_dout),
 
 	.address_b(sd_buff_addr),
-	.wren_b(sd_buff_wr & sd_ack & |sd_lba[10:4]),
+	.wren_b(sd_buff_wr & sd_ack & |sd_lba[0][10:4]),
 	.data_b(sd_buff_dout),
 	.q_b(tmpram_sd_buff_data)
 );
@@ -912,7 +913,7 @@ reg tmpram_busy_d;
 always @(posedge clk_sys) begin
 	reg state;
 
-	tmpram_lba <= sd_lba[10:0]-11'h10;
+	tmpram_lba <= sd_lba[0][10:0]-11'h10;
 	
 	tmpram_busy_d <= tmpram_busy;
 	if(~tmpram_busy_d & tmpram_busy) tmpram_req <= 0;
@@ -1069,6 +1070,7 @@ video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 	.scandoubler(~interlace && (scale || forced_scandoubler)),
 	.hq2x(scale==1),
+	.freeze_sync(),
 
 	.VGA_DE(vga_de),
 	.R((lg_target && gun_mode && (~&status[44:43])) ? {8{lg_target[0]}} : red),
@@ -1212,7 +1214,7 @@ always @(posedge clk_sys) begin
 	if(!bk_state) begin
 		tmpram_tx_start <= 0;
 		state <= 0;
-		sd_lba <= 0;
+		sd_lba[0] <= 0;
 		bk_reload <= 0;
 		bk_loading <= 0;
 		if(bk_ena & ((~old_load & bk_load) | (~old_save & bk_save) | (~old_save_a & bk_save_a & sav_pending))) begin
@@ -1229,10 +1231,10 @@ always @(posedge clk_sys) begin
 			sd_wr <= 0;
 		end
 	end
-	else if(!sd_lba[10:4]) begin
+	else if(!sd_lba[0][10:4]) begin
 		if(old_ack & ~sd_ack) begin
-			sd_lba <= sd_lba + 1'd1;
-			if(&sd_lba[3:0]) begin
+			sd_lba[0] <= sd_lba[0] + 1'd1;
+			if(&sd_lba[0][3:0]) begin
 				if(~CART_EN) bk_state <= 0;
 			end else begin
 				sd_rd <=  bk_loading;
@@ -1253,8 +1255,8 @@ always @(posedge clk_sys) begin
 			2: if(tmpram_tx_finish) begin
 					tmpram_tx_start <= 0;
 					state <= 0;
-					sd_lba <= sd_lba + 1'd1;
-					if(sd_lba[10:0] == 11'h40F) bk_state <= 0;
+					sd_lba[0] <= sd_lba[0] + 1'd1;
+					if(sd_lba[0][10:0] == 11'h40F) bk_state <= 0;
 				end
 		endcase
 	end
@@ -1271,8 +1273,8 @@ always @(posedge clk_sys) begin
 				end
 			2: if(old_ack & ~sd_ack) begin
 					state <= 0;
-					sd_lba <= sd_lba + 1'd1;
-					if(sd_lba[10:0] == 11'h40F) bk_state <= 0;
+					sd_lba[0] <= sd_lba[0] + 1'd1;
+					if(sd_lba[0][10:0] == 11'h40F) bk_state <= 0;
 				end
 		endcase
 	end
