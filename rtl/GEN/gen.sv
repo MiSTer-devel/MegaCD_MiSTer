@@ -263,24 +263,22 @@ fx68k M68K
 	.IPL0n(M68K_IPL_N[0]),
 	.IPL1n(M68K_IPL_N[1]),
 	.IPL2n(M68K_IPL_N[2]),
-	.iEdb(genie_ovr ? genie_data : MBUS_DI),
+	.iEdb(genie_data),
 	.oEdb(M68K_DO),
 	.eab(M68K_A)
 );
 
-wire genie_ovr;
 wire [15:0] genie_data;
-
-CODES #(.ADDR_WIDTH(24), .DATA_WIDTH(16)) codes (
+CODES #(.ADDR_WIDTH(24), .DATA_WIDTH(16), .BIG_ENDIAN(1)) codes
+(
 	.clk(MCLK),
 	.reset(GG_RESET),
 	.enable(~GG_EN),
-	.addr_in({M68K_A[23:1], 1'b0}),
-	.data_in(MBUS_DI),
 	.code(GG_CODE),
 	.available(GG_AVAILABLE),
-	.genie_ovr(genie_ovr),
-	.genie_data(genie_data)
+	.addr_in({M68K_A[23:1], 1'b0}),
+	.data_in(MBUS_DI),
+	.data_out(genie_data)
 );
 
 
