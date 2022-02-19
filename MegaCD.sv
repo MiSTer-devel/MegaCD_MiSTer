@@ -258,7 +258,7 @@ pll pll
 `include "build_id.v"
 localparam CONF_STR = {
 	"MegaCD;;",
-	"S0,CUE,Insert Disk;",
+	"S0,CUECHD,Insert Disk;",
 	"-;",
 	"h6O67,Region,Auto(JP),JP,US,EU;",
 	"h7O67,Region,Auto(US),JP,US,EU;",
