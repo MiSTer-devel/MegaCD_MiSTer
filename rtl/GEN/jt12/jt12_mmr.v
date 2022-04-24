@@ -18,13 +18,13 @@
     Date: 14-2-2017
     */
 
-`timescale 1ns / 1ps
 
 module jt12_mmr(
     input           rst,
     input           clk,
-    input           cen,
+    input           cen /* synthesis direct_enable */,
     output          clk_en,
+    output          clk_en_2,
     output          clk_en_ssg,
     output          clk_en_666,
     output          clk_en_111,
@@ -51,6 +51,7 @@ module jt12_mmr(
     output  reg         fast_timers,
     input               flag_A,
     input               overflow_A, 
+    output  reg [1:0]   div_setting,
     // PCM
     output  reg [8:0]   pcm,
     output  reg         pcm_en,
@@ -69,6 +70,7 @@ module jt12_mmr(
     output  reg         acmd_on_b,  // Control - Process start, Key On
     output  reg         acmd_rep_b, // Control - Repeat
     output  reg         acmd_rst_b, // Control - Reset
+    output  reg         acmd_up_b,  // Control - New cmd received
     output  reg  [ 1:0] alr_b,      // Left / Right
     output  reg  [15:0] astart_b,   // Start address
     output  reg  [15:0] aend_b,     // End   address
@@ -120,20 +122,19 @@ module jt12_mmr(
     // PSG interace
     output  [3:0]   psg_addr,
     output  [7:0]   psg_data,
-    output  reg     psg_wr_n
+    output  reg     psg_wr_n,
+    input   [7:0]   debug_bus
 );
 
 parameter use_ssg=0, num_ch=6, use_pcm=1, use_adpcm=0;
 
-reg [1:0] div_setting;
-
-
-jt12_div #(.use_ssg(use_ssg),.num_ch(num_ch)) u_div (
+jt12_div #(.use_ssg(use_ssg)) u_div (
     .rst            ( rst             ),
     .clk            ( clk             ),
     .cen            ( cen             ),
     .div_setting    ( div_setting     ),
     .clk_en         ( clk_en          ),
+    .clk_en_2       ( clk_en_2        ),
     .clk_en_ssg     ( clk_en_ssg      ),
     .clk_en_666     ( clk_en_666      ),
     .clk_en_111     ( clk_en_111      ),
@@ -198,10 +199,12 @@ endgenerate
 reg part;
 
 // this runs at clk speed, no clock gating here
+// if I try to make this an async rst it fails to map it
+// as flip flops but uses latches instead. So I keep it as sync. reset
 always @(posedge clk) begin : memory_mapped_registers
     if( rst ) begin
         selected_register   <= 8'h0;
-        div_setting         <= 2'b11; 
+        div_setting         <= 2'b10; // FM=1/6, SSG=1/4
         up_ch               <= 3'd0;
         up_op               <= 2'd0;
         up_keyon            <= 1'd0;
@@ -260,39 +263,52 @@ always @(posedge clk) begin : memory_mapped_registers
         if( write ) begin
             if( !addr[0] ) begin
                 selected_register <= din;  
-                part <= addr[1];             
+                part <= addr[1];        
+                case(din)
+                    // clock divider: should work only for ym2203
+                    // and ym2608.
+                    // clock divider works just by selecting the register
+                    REG_CLK_N6: div_setting[1] <= 1'b1; // 2D
+                    REG_CLK_N3: div_setting[0] <= 1'b1; // 2E
+                    REG_CLK_N2: div_setting    <= 2'b0; // 2F
+                    default:;
+                endcase
             end else begin
                 // Global registers
                 din_copy <= din;
-                up_keyon <= selected_register == REG_KON;
+                up_keyon <= selected_register == REG_KON && !part;
                 up_ch <= {part, selected_register[1:0]};
                 up_op <= selected_register[3:2]; // 0=S1,1=S3,2=S2,3=S4
+
+                // General control (<0x20 registers and A0==0)
+                if(!part) begin
+                    casez( selected_register)
+                        //REG_TEST: lfo_rst <= 1'b1; // regardless of din
+                        8'h0?: psg_wr_n <= 1'b0;
+                        REG_TESTYM: begin
+                            eg_stop <= din[5];
+                            pg_stop <= din[3];
+                            fast_timers <= din[2];
+                            end
+                        REG_CLKA1:  value_A[9:2]<= din;
+                        REG_CLKA2:  value_A[1:0]<= din[1:0];
+                        REG_CLKB:   value_B     <= din;
+                        REG_TIMER: begin
+                            effect  <= |din[7:6];
+                            csm     <= din[7:6] == 2'b10;
+                            { clr_flag_B, clr_flag_A,
+                              enable_irq_B, enable_irq_A,
+                              load_B, load_A } <= din[5:0];
+                            end
+                        `ifndef NOLFO                   
+                        REG_LFO:    { lfo_en, lfo_freq } <= din[3:0];
+                        `endif
+                        default:;
+                    endcase
+                end
+
+                // CH3 special registers
                 casez( selected_register)
-                    //REG_TEST: lfo_rst <= 1'b1; // regardless of din
-                    8'h0?: if(!part) psg_wr_n <= 1'b0;
-                    REG_TESTYM: begin
-                        eg_stop <= din[5];
-                        pg_stop <= din[3];
-                        fast_timers <= din[2];
-                        end
-                    REG_CLKA1:  value_A[9:2]<= din;
-                    REG_CLKA2:  value_A[1:0]<= din[1:0];
-                    REG_CLKB:   value_B     <= din;
-                    REG_TIMER: begin
-                        effect  <= |din[7:6];
-                        csm     <= din[7:6] == 2'b10;
-                        { clr_flag_B, clr_flag_A,
-                          enable_irq_B, enable_irq_A,
-                          load_B, load_A } <= din[5:0];
-                        end
-                    `ifndef NOLFO                   
-                    REG_LFO:    { lfo_en, lfo_freq } <= din[3:0];
-                    `endif
-                    // clock divider
-                    REG_CLK_N6: div_setting[1] <= 1'b1; 
-                    REG_CLK_N3: div_setting[0] <= 1'b1; 
-                    REG_CLK_N2: div_setting <= 2'b0;
-                    // CH3 special registers
                     8'hA9: { block_ch3op1, fnum_ch3op1 } <= { latch_fnum, din };
                     8'hA8: { block_ch3op3, fnum_ch3op3 } <= { latch_fnum, din };
                     8'hAA: { block_ch3op2, fnum_ch3op2 } <= { latch_fnum, din };
@@ -301,6 +317,7 @@ always @(posedge clk) begin : memory_mapped_registers
                     8'hA4, 8'hA5, 8'hA6, 8'hAD, 8'hAC, 8'hAE: latch_fnum <= din[5:0];
                     default:;   // avoid incomplete-case warning
                 endcase
+
                 // YM2612 PCM support
                 if( use_pcm==1 ) begin
                     casez( selected_register)
@@ -346,7 +363,7 @@ always @(posedge clk) begin : memory_mapped_registers
                     if( !part && selected_register[7:4]==4'h1 ) begin
                         // YM2610 ADPCM-B support, A1=0, regs 1x
                         case(selected_register[3:0])
-                            4'd0: {acmd_on_b, acmd_rep_b,acmd_rst_b} <= {din[7],din[4],din[0]};
+                            4'd0: {acmd_up_b, acmd_on_b, acmd_rep_b,acmd_rst_b} <= {1'd1,din[7],din[4],din[0]};
                             4'd1: alr_b  <= din[7:6];
                             4'd2: astart_b [ 7:0] <= din;
                             4'd3: astart_b [15:8] <= din;
@@ -388,13 +405,14 @@ always @(posedge clk) begin : memory_mapped_registers
             pcm_wr   <= 1'b0;
             flag_ctl <= 'd0;
             up_aon   <= 1'b0;
+            acmd_up_b <= 1'b0;
         end
     end
 end
 
 reg [4:0] busy_cnt; // busy lasts for 32 synth clock cycles, like in real chip
 
-always @(posedge clk)
+always @(posedge clk, posedge rst)
     if( rst ) begin
         busy <= 1'b0;
         busy_cnt <= 5'd0;
@@ -409,7 +427,7 @@ always @(posedge clk)
             busy_cnt <= busy_cnt+5'd1;
         end
     end
-/* verilator tracing_off */
+/* verilator tracing_on */
 jt12_reg #(.num_ch(num_ch)) u_reg(
     .rst        ( rst       ),
     .clk        ( clk       ),      // P1

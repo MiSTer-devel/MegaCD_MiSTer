@@ -36,7 +36,7 @@
 module jt12_acc(
     input               rst,
     input               clk,
-    input               clk_en,
+    input               clk_en /* synthesis direct_enable */,
     input               ladder,
     input               channel_en,
     input signed [8:0]  op_result,
@@ -74,6 +74,8 @@ always @(posedge clk) if(clk_en)
 
 wire use_pcm = ch6op && pcm_en;
 wire sum_or_pcm = sum_en | use_pcm;
+// wire left_en = rl[1];
+// wire right_en= rl[0];
 wire signed [8:0] pcm_data = pcm_sum ? pcm : 9'd0;
 
 wire signed [8:0] acc_input = ~channel_en ? 9'd0 : (use_pcm ? pcm_data : op_result);
