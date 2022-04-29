@@ -39,6 +39,8 @@ module emu
 	//Must be based on CLK_VIDEO
 	output        CE_PIXEL,
 
+	output		  PALSW,
+
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
 	//if VIDEO_ARX[12] or VIDEO_ARY[12] is set then [11:0] contains scaled size instead of aspect ratio.
 	output [12:0] VIDEO_ARX,
@@ -386,6 +388,7 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE
 };
 
+assign PALSW = PAL;
 
 wire [15:0] status_menumask = {en216p,region,!region,~gg_available,!gun_mode,1'b1,~dbg_menu,1'b0,~bk_ena};
 wire [63:0] status;
@@ -734,6 +737,7 @@ MCD MCD
 	.CLK(clk_sys),
 	.ENABLE(1),
 	.MCD_RST_N(MCD_RST_N),
+	.PALSW(PALSW),
 
 	.EXT_VA(GEN_VA[17:1]),
 	.EXT_VDI(GEN_VDO),
