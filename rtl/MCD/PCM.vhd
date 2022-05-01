@@ -10,6 +10,8 @@ entity PCM is
 		ENABLE		: in std_logic;
 		CLKEN 		: in std_logic;
 		
+		PALSW			: in std_logic;
+		
 		A				: in std_logic_vector(12 downto 0);
 		DI				: in std_logic_vector(7 downto 0);
 		DO				: out std_logic_vector(7 downto 0);
@@ -65,6 +67,8 @@ architecture rtl of PCM is
 	signal CH 			: unsigned(2 downto 0);
 	signal LSUM, RSUM : unsigned(16 downto 0);
 	signal LOUT, ROUT : signed(15 downto 0);
+		
+	signal PCM_REF   : integer;
 	
 	impure function CLAMP16(a: unsigned(16 downto 0)) return unsigned is
 		variable res: unsigned(15 downto 0); 
@@ -194,11 +198,20 @@ begin
 	RAM_DO_A <= DI;
 	RAM_WE_A <= RAM_WR;
 	
+	process ( RST_N, CLK )
+		begin
+		if PALSW = '1' then
+			PCM_REF <= 53203423;
+			elsif PALSW = '0' then
+			PCM_REF <= 53693175;
+		end if;
+	end process;
+	
 	CEGen : entity work.CEGen
 	port map(
 		CLK   		=> CLK,
 		RST_N       => RST_N,		
-		IN_CLK   	=> 53690000,
+		IN_CLK   	=> PCM_REF,
 		OUT_CLK   	=> 520832,				--12500000/384=32552*8*2=520832
 		CE   			=> SAMPLE_CE
 	);

@@ -9,6 +9,7 @@ entity MCD is
 		RST_N				: in std_logic;
 		ENABLE			: in std_logic;
 		MCD_RST_N      : out std_logic;
+		PALSW				: in std_logic;
 
 		EXT_VA   		: in std_logic_vector(17 downto 1);
 		EXT_VDI			: in std_logic_vector(15 downto 0);
@@ -379,6 +380,7 @@ begin
 		CLK   		=> CLK,
 		RST_N       => ERES_N,
 		ENABLE      => ENABLE,
+		PALSW			=> PALSW,
 		
 		CLKEN			=> S68K_CE_F,
 		A   			=> PCM_A,--S68K_A(13 downto 1),
@@ -417,6 +419,8 @@ begin
 		CLK   		=> CLK,
 		RST_N       => ERES_N,
 		ENABLE      => '1',
+		
+		PALSW			=> PALSW,
 		
 		CD_DI   		=> CDC_DATA,
 		CD_WR   		=> CDC_DAT_WR,
