@@ -245,8 +245,8 @@ pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(clk_sys),
-	.outclk_1(clk_ram),
+	.outclk_0(clk_ram),
+	.outclk_1(clk_sys),
 	.reconfig_to_pll(reconfig_to_pll),
 	.reconfig_from_pll(reconfig_from_pll),
 	.locked(locked)
