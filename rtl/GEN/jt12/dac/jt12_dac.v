@@ -15,41 +15,42 @@
 
 	Author: Jose Tejada Gomez. Twitter: @topapate
 	Version: 1.0
-	Date: 1-31-2017
+	Date: March, 9th 2017
 	*/
 
+`timescale 1ns / 1ps
 
-// stages must be greater than 2
-module jt12_sh_rst #(parameter width=5, stages=32, rstval=1'b0 )
+/*
+
+	input sampling rate must be the same as clk frequency
+    interpolation the input signal accordingly to get the
+    right sampling rate
+
+*/
+
+module jt12_dac #(parameter width=12)
 (
-	input					rst,	
-	input 					clk,
-	input					clk_en /* synthesis direct_enable */,
-	input		[width-1:0]	din,
-   	output		[width-1:0]	drop
+	input	clk,
+    input	rst,
+    input	signed	[width-1:0] din,
+    output	dout
 );
+localparam acc_w = width+1;
 
-reg [stages-1:0] bits[width-1:0];
+reg [width-1:0] nosign;
+reg [acc_w-1:0] acc;
+wire [acc_w-2:0] err = acc[acc_w-2:0];
 
-genvar i;
-integer k;
-generate
-initial
-	for (k=0; k < width; k=k+1) begin
-		bits[k] = { stages{rstval}};
-	end
-endgenerate
+assign dout = acc[acc_w-1];
 
-generate
-	for (i=0; i < width; i=i+1) begin: bit_shifter
-		always @(posedge clk, posedge rst) 
-			if( rst ) begin
-				bits[i] <= {stages{rstval}};
-			end else if(clk_en) begin
-				bits[i] <= {bits[i][stages-2:0], din[i]};
-			end
-		assign drop[i] = bits[i][stages-1];
-	end
-endgenerate
+always @(posedge clk) 
+if( rst ) begin
+	acc <= {(acc_w){1'b0}};
+	nosign <= {width{1'b0}};
+end
+else begin
+	nosign <= { ~din[width-1], din[width-2:0] };
+	acc <= nosign + err;
+end
 
 endmodule

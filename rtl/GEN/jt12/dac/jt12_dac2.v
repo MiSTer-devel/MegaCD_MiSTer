@@ -15,28 +15,49 @@
 
 	Author: Jose Tejada Gomez. Twitter: @topapate
 	Version: 1.0
-	Date: March, 10th 2017
+	Date: March, 9th 2017
 	*/
-
-/* Limiting amplifier by 3dB * shift */
 
 `timescale 1ns / 1ps
 
-module jt12_limitamp #( parameter width=20, shift=5 ) (
-	input signed [width-1:0] left_in,
-	input signed [width-1:0] right_in,
-	output reg signed [width-1:0] left_out,
-	output reg signed [width-1:0] right_out
+/*
+
+	input sampling rate must be the same as clk frequency
+    interpolate input signal accordingly to get the
+    right sampling rate.
+	
+	Refer to sigmadelta.ods to see how the internal width (int_w)
+	was determined.
+
+*/
+
+module jt12_dac2 #(parameter width=12)
+(
+	input	clk,
+    input	rst,
+    input	signed [width-1:0] din,
+    output	reg dout
 );
 
-always @(*) begin
-	left_out = ^left_in[width-1:width-1-shift] ?
-		{ left_in[width-1], {(width-1){~left_in[width-1]}}} :
-		left_in <<< shift;
+localparam int_w = width+5;
 
-	right_out = ^right_in[width-1:width-1-shift] ?
-		{ right_in[width-1], {(width-1){~right_in[width-1]}}} :
-		right_in <<< shift;
+reg [int_w-1:0] y, error, error_1, error_2;
+
+wire [width-1:0] undin = { ~din[width-1], din[width-2:0] };
+
+always @(*) begin
+	y = undin + { error_1, 1'b0} - error_2;
+	dout = ~y[int_w-1];
+	error = y - {dout, {width{1'b0}}};
 end
+
+always @(posedge clk)
+	if( rst ) begin
+		error_1 <= {int_w{1'b0}};
+		error_2 <= {int_w{1'b0}};
+	end else begin
+		error_1 <= error;
+		error_2 <= error_1;
+	end
 
 endmodule

@@ -20,18 +20,20 @@
 
 */
 
-`timescale 1ns / 1ps
 
-/* Use for YM2203
-    no left/right channels
-    full operator resolution
-    clamped to maximum output of signed 16 bits */
+// Use for YM2203
+// no left/right channels
+// full operator resolution
+// clamped to maximum output of signed 16 bits
+// This version does not clamp each channel individually
+// That does not correspond to real hardware behaviour. I should
+// change it.
 
 module jt03_acc
 (
     input               rst,
     input               clk,
-    input               clk_en,
+    input               clk_en /* synthesis direct_enable */,
     input signed [13:0] op_result,
     input               s1_enters,
     input               s2_enters,
