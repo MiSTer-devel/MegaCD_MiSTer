@@ -198,15 +198,8 @@ begin
 	RAM_DO_A <= DI;
 	RAM_WE_A <= RAM_WR;
 	
-	process ( RST_N, CLK )
-		begin
-		if PALSW = '1' then
-			PCM_REF <= 53203423;
-			elsif PALSW = '0' then
-			PCM_REF <= 53693175;
-		end if;
-	end process;
-	
+	PCM_REF <= 53203423 when PALSW = '1' else 53693175;
+
 	CEGen : entity work.CEGen
 	port map(
 		CLK   		=> CLK,

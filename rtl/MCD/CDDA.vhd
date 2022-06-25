@@ -88,14 +88,7 @@ begin
 		q			=> FIFO_Q
 	);
 	
-	process ( RST_N, CLK )
-		begin
-		if PALSW = '1' then
-			CDDA_REF <= 532034;
-			elsif PALSW = '0' then
-			CDDA_REF <= 536931;
-		end if;
-	end process;
+	CDDA_REF <= 532034 when PALSW = '1' else 536931;
 	
 	CEGen : entity work.CEGen
 	port map(
