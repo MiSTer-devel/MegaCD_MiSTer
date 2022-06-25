@@ -16,10 +16,10 @@
     Author: Jose Tejada Gomez. Twitter: @topapate
     Version: 1.0
     Date: March, 8th 2017
-    
+
     This work was originally based in the implementation found on the
     SMS core of MiST. Some of the changes, all according to data sheet:
-    
+
         -Fixed volume
         -Fixed tone 2 rate option of noise generator
         -Fixed rate of noise generator
@@ -27,7 +27,7 @@
         -Fixed noise generator update bug by which it gets updated
             multiple times if v='0'
         -Added all 0's prevention circuit to noise generator
-    
+
     */
 
 module jt89(
@@ -40,14 +40,19 @@ module jt89(
     output         ready
 );
 
+parameter interpol16=0;
+
 wire signed [ 8:0] ch0, ch1, ch2, noise;
 
 assign ready = 1'b1;
+(* direct_enable = 1 *) reg cen_16;
+(* direct_enable = 1 *) reg cen_4;
 
-jt89_mixer mix(
+jt89_mixer #(.interpol16(interpol16)) mix(
     .clk    ( clk   ),
     .clk_en ( clk_en), // uses main clock enable
     .cen_16 ( cen_16),
+    .cen_4  ( cen_4 ),
     .rst    ( rst   ),
     .ch0    ( ch0   ),
     .ch1    ( ch1   ),
@@ -63,17 +68,18 @@ reg [2:0] ctrl3;
 reg [2:0] regn;
 
 reg [3:0] clk_div;
-(* direct_enable = 1 *) reg cen_16;
 
-always @(negedge clk )
+always @(posedge clk )
     if( rst ) begin
         cen_16 <= 1'b1;
+        cen_4  <= 1'b1;
     end else begin
         cen_16 <= clk_en & (&clk_div);
+        cen_4  <= clk_en & (&clk_div[1:0]);
     end
 
 always @(posedge clk )
-    if( rst ) 
+    if( rst )
         clk_div <= 4'd0;
     else if( clk_en )
         clk_div <= clk_div + 1'b1;
@@ -81,7 +87,7 @@ always @(posedge clk )
 reg clr_noise, last_wr;
 wire [2:0] reg_sel = din[7] ? din[6:4] : regn;
 
-always @(posedge clk) 
+always @(posedge clk)
     if( rst ) begin
         { vol0, vol1, vol2, vol3 } <= {16{1'b1}};
         { tone0, tone1, tone2 } <= 30'd0;
@@ -97,7 +103,7 @@ always @(posedge clk)
                 3'b00_0: if( din[7] ) tone0[3:0]<=din[3:0]; else tone0[9:4]<=din[5:0];
                 3'b01_0: if( din[7] ) tone1[3:0]<=din[3:0]; else tone1[9:4]<=din[5:0];
                 3'b10_0: if( din[7] ) tone2[3:0]<=din[3:0]; else tone2[9:4]<=din[5:0];
-                3'b11_0: ctrl3 <= din[2:0]; //Need to update these every time.
+                3'b11_0: ctrl3 <= din[2:0];
                 3'b00_1: vol0  <= din[3:0];
                 3'b01_1: vol1  <= din[3:0];
                 3'b10_1: vol2  <= din[3:0];
@@ -119,7 +125,7 @@ jt89_tone u_tone0(
 
 jt89_tone u_tone1(
     .clk    ( clk       ),
-    .rst    ( rst       ),  
+    .rst    ( rst       ),
     .clk_en ( cen_16    ),
     .vol    ( vol1      ),
     .tone   ( tone1     ),
