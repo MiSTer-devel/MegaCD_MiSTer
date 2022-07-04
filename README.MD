@@ -13,6 +13,7 @@ About 150 games tested without long playing, US/EU regions only.
 ### Supported image formats:
 - CUE + single image
 - CUE + multiple images (image per track)
+- CHD file
 
 ### ZIP
 ZIP is supported but doesn't work due to long positioning time.
