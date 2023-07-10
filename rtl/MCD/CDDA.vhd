@@ -17,8 +17,8 @@ entity CD_DAC is
 		FD_DI			: in std_logic_vector(10 downto 0);
 		FD_WR			: in std_logic;
 		
-		DM				: in std_logic;
-		
+		WR_READY 		: out std_logic;
+
 		SL				: out signed(15 downto 0);
 		SR				: out signed(15 downto 0)
 	);
@@ -46,6 +46,15 @@ architecture rtl of CD_DAC is
 	
 	signal CDDA_REF   : integer;
 
+	component CDDA_FIFO
+		port (
+			CLK, nRESET, RD, WR         : in std_logic;
+			DIN                         : in std_logic_vector(31 downto 0);
+			EMPTY, FULL, WRITE_READY    : out std_logic;
+			Q                           : out std_logic_vector(31 downto 0)
+		);
+	end component;
+
 begin
 
 	EN <= ENABLE;
@@ -67,7 +76,7 @@ begin
 						FIFO_D(15 downto 0) <= CD_DI;
 					else
 						FIFO_D(31 downto 16) <= CD_DI;
-						if FULL = '0' and DM = '0' then
+						if FULL = '0' then
 							WR_REQ <= '1';
 						end if;
 					end if;
@@ -75,17 +84,20 @@ begin
 			end if;
 		end if;
 	end process;
+
 	
-	FIFO : entity work.CDDA_FIFO 
+	FIFO : CDDA_FIFO
 	port map(
-		clock		=> CLK,
-		data		=> FIFO_D,
-		wrreq		=> WR_REQ,
-		full		=> FULL,
-		
-		rdreq		=> RD_REQ,
-		empty		=> EMPTY,
-		q			=> FIFO_Q
+		CLK          => CLK,
+		nRESET      => RST_N,
+		DIN         => FIFO_D,
+		WR          => WR_REQ,
+		FULL        => FULL,
+		WRITE_READY => WR_READY,
+
+		RD          => RD_REQ,
+		EMPTY       => EMPTY,
+		Q           => FIFO_Q
 	);
 	
 	CDDA_REF <= 532034 when PALSW = '1' else 536931;

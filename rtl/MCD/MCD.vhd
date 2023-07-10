@@ -52,6 +52,8 @@ entity MCD is
 		CDC_DATA			: in std_logic_vector(15 downto 0);
 		CDC_DAT_WR		: in std_logic;
 		CDC_SC_WR		: in std_logic;
+		CDC_CDDA_WR		: in std_logic;
+		CDDA_WR_READY	: out std_logic;
 		
 		PCM_SL			: out signed(15 downto 0);
 		PCM_SR			: out signed(15 downto 0);
@@ -423,12 +425,12 @@ begin
 		PALSW			=> PALSW,
 		
 		CD_DI   		=> CDC_DATA,
-		CD_WR   		=> CDC_DAT_WR,
+		CD_WR   		=> CDC_CDDA_WR,
 		
 		FD_DI   		=> ASIC_FD_DAT,
 		FD_WR   		=> ASIC_FD_WR,
 		
-		DM   			=> CDD_DM,
+		WR_READY		=> CDDA_WR_READY,
 		
 		SL   			=> CDDA_SL,
 		SR   			=> CDDA_SR
