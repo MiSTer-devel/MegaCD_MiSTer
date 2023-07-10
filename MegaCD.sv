@@ -477,6 +477,10 @@ hps_ext hps_ext
 (
 	.clk_sys(clk_sys),
 	.EXT_BUS(EXT_BUS),
+
+	.cd_data_ready(1),
+	.cdda_ready(MCD_CDDA_WR_READY),
+
 	.cd_in(cd_in),
 	.cd_out(cd_out)
 );
@@ -503,6 +507,7 @@ end
 wire rom_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
 wire cdc_dat_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 wire cdc_sub_download = ioctl_download & (ioctl_index[5:0] == 6'h03);
+wire cdc_cdda_download = ioctl_download & (ioctl_index[5:0] == 6'h04);
 wire save_download = ioctl_download & (ioctl_index[5:0] == 6'h05);
 wire code_download = ioctl_download & &ioctl_index;
 
@@ -708,6 +713,7 @@ wire [15:0] MCD_PCM_SL;
 wire [15:0] MCD_PCM_SR;
 wire [15:0] MCD_CDDA_SL;
 wire [15:0] MCD_CDDA_SR;
+wire        MCD_CDDA_WR_READY;
 
 wire [17:0] MCD_PRG_ADDR;
 wire [15:0] MCD_PRG_DO;
@@ -775,8 +781,10 @@ MCD MCD
 	.CDD_DM(scd_cdd_dm),
 	
 	.CDC_DATA(cdc_d),
-	.CDC_DAT_WR(cdc_wr & cdc_dat_download),
+	.CDC_DAT_WR(cdc_wr & (cdc_dat_download | cdc_cdda_download)),
 	.CDC_SC_WR(cdc_wr & cdc_sub_download),
+	.CDC_CDDA_WR(cdc_wr & cdc_cdda_download),
+	.CDDA_WR_READY(MCD_CDDA_WR_READY),
 
 	.PCM_SL(MCD_PCM_SL),
 	.PCM_SR(MCD_PCM_SR),
