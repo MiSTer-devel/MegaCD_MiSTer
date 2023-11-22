@@ -314,7 +314,7 @@ end
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXX  XXXXXXXXXXXXXXXXX XXX XXXXXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXXX XXXXXXXXXXXXXXXXXX XXX XXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 localparam CONF_STR = {
@@ -351,6 +351,7 @@ localparam CONF_STR = {
 	"P1-;",
 	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
 	"P1OR,CD Audio,Unfiltered,Filtered;",
+	"P1oPQ,Audio Boost,No,2x,4x;",
 	"P1O8,FM Chip,YM2612,YM3438;",
 	"P1ON,HiFi PCM,No,Yes;",
 
@@ -800,7 +801,29 @@ MCD MCD
 	.GG_AVAILABLE(gg_available2)
 );
 
+localparam [3:0] comp_f1 = 4;
+localparam [3:0] comp_a1 = 2;
+localparam       comp_x1 = ((32767 * (comp_f1 - 1)) / ((comp_f1 * comp_a1) - 1)) + 1; // +1 to make sure it won't overflow
+localparam       comp_b1 = comp_x1 * comp_a1;
+
+localparam [3:0] comp_f2 = 8;
+localparam [3:0] comp_a2 = 4;
+localparam       comp_x2 = ((32767 * (comp_f2 - 1)) / ((comp_f2 * comp_a2) - 1)) + 1; // +1 to make sure it won't overflow
+localparam       comp_b2 = comp_x2 * comp_a2;
+
+function [15:0] compr; input [15:0] inp;
+	reg [15:0] v, v1, v2;
+	begin
+		v  = inp[15] ? (~inp) + 1'd1 : inp;
+		v1 = (v < comp_x1[15:0]) ? (v * comp_a1) : (((v - comp_x1[15:0])/comp_f1) + comp_b1[15:0]);
+		v2 = (v < comp_x2[15:0]) ? (v * comp_a2) : (((v - comp_x2[15:0])/comp_f2) + comp_b2[15:0]);
+		v  = status[58] ? v2 : v1;
+		compr = inp[15] ? ~(v-1'd1) : v;
+	end
+endfunction
+
 reg [15:0] aud_l, aud_r;
+reg [15:0] cmp_l, cmp_r;
 reg [15:0] mcd_l, mcd_r;
 always @(posedge clk_sys) begin
 	mcd_l <= ({16{EN_MCD_PCM}} & {MCD_PCM_SL[15],MCD_PCM_SL[15:1]}) + ({16{EN_MCD_CDDA}} & {MCD_CDDA_SL[15],MCD_CDDA_SL[15:1]});
@@ -814,10 +837,13 @@ always @(posedge clk_sys) begin
 		aud_l <= GEN_AUDL;
 		aud_r <= GEN_AUDR;
 	end
+	
+	cmp_l <= compr(aud_l);
+	cmp_r <= compr(aud_r);
 end
 
-assign AUDIO_L = aud_l;
-assign AUDIO_R = aud_r;
+assign AUDIO_L = status[58:57] ? cmp_l : aud_l;
+assign AUDIO_R = status[58:57] ? cmp_r : aud_r;
 
 
 //ROM/RAM Cart
