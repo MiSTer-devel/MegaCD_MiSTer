@@ -68,6 +68,7 @@ module gen
 
 	output [15:0] DAC_LDATA,
 	output [15:0] DAC_RDATA,
+	output        DAC_CE,
 
 	input         LOADING,
 	input         PAL,
@@ -1224,7 +1225,8 @@ genesis_lpf lpf_right
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
 	.in(mix_r),
-	.out(DAC_RDATA)
+	.out(DAC_RDATA),
+	.ce_out(DAC_CE)
 );
 
 genesis_lpf lpf_left
@@ -1233,7 +1235,8 @@ genesis_lpf lpf_left
 	.reset(reset),
 	.lpf_mode(LPF_MODE[1:0]),
 	.in(mix_l),
-	.out(DAC_LDATA)
+	.out(DAC_LDATA),
+	.ce_out()
 );
 
 endmodule

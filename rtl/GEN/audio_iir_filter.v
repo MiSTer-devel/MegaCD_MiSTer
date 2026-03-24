@@ -32,8 +32,9 @@ module iir_1st_order
 	input reset,
 	input [COUNT_BITS - 1 : 0] div,
 	input signed [COEFF_WIDTH - 1 : 0] A2, B1, B2,
-   input signed [DATA_WIDTH - 1 :0] in,
-   output [DATA_WIDTH - 1:0] out
+	input signed [DATA_WIDTH - 1 :0] in,
+	output [DATA_WIDTH - 1:0] out,
+	output reg ce_out
 );
 
 	reg signed [DATA_WIDTH-1:0] x0,x1,y0;
@@ -78,14 +79,17 @@ module iir_1st_order
 			x0 <= 0;
 			x1 <= 0;
 			y0 <= 0;
+			ce_out <= 0;
 		end
 		else begin
 			count <= count + 1'd1;
+			ce_out <= 0;
 			if (count == div - 1) begin
 					count <= 0;
 					y0 <= {out32[DATA_WIDTH + COEFF_WIDTH - 1] , out32[COEFF_SCALE + DATA_WIDTH - 2 : COEFF_SCALE]};
 					x1 <= x0;
 					x0 <= in;
+					ce_out <= 1'b1;
 			end
 		end
 	end

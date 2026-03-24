@@ -570,6 +570,7 @@ wire        GEN_MEM_BUSY;
 
 wire [15:0] GEN_AUDL;
 wire [15:0] GEN_AUDR;
+wire        GEN_CE;
 
 wire [7:0] color_lut[16] = '{
 	8'd0,   8'd27,  8'd49,  8'd71,
@@ -634,6 +635,7 @@ gen gen
 
 	.DAC_LDATA(GEN_AUDL),
 	.DAC_RDATA(GEN_AUDR),
+	.DAC_CE(GEN_CE),
 
 	.RED(r),
 	.GREEN(g),
@@ -846,9 +848,14 @@ always @(posedge clk_sys) begin
 	cmp_r <= compr(aud_r);
 end
 
-assign AUDIO_L = status[58:57] ? cmp_l : aud_l;
-assign AUDIO_R = status[58:57] ? cmp_r : aud_r;
-
+audio_fix #(250) audio_fix // MCLK/504 in lpf, so choose half to get in the middle of sample period
+(
+	.*,
+	.clk(clk_sys),
+	.ce(GEN_CE),
+	.l(status[58:57] ? cmp_l : aud_l),
+	.r(status[58:57] ? cmp_r : aud_r)
+);
 
 //ROM/RAM Cart
 wire [15:0] CART_DO;
