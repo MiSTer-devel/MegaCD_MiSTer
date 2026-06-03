@@ -24,6 +24,7 @@ module audio_fix #(parameter CE_OFFSET)
 	output reg [15:0] AUDIO_L,
 	output reg [15:0] AUDIO_R,
 
+	input        reset,
 	input        clk,
 	input        ce,
 	input [15:0] l,
@@ -36,22 +37,31 @@ reg src_toggle;
 always_ff @(posedge clk) begin
 	reg ce_r;
 	reg [CNT_W:0] cnt;
+	reg rst1, rst2;
+
+	//in case if reset is async or comes from different clock
+	rst1 <= reset;
+	rst2 <= rst1;
 	
 	if(~&cnt) cnt <= cnt + 1'd1;
 	ce_r <= ce;
-	if(~ce_r & ce) cnt <= 0;
-	
+	if((~ce_r & ce) || rst2) cnt <= 0;
+
 	if(cnt == CE_OFFSET) src_toggle <= ~src_toggle;
 end
 
 always @(posedge CLK_AUDIO) begin
 	reg tgl1, tgl2, tgl3;
+	reg rst1, rst2;
+
+	rst1 <= reset;
+	rst2 <= rst1;
 	
 	tgl1 <= src_toggle;
 	tgl2 <= tgl1;
 	if(tgl2 == tgl1) tgl3 <= tgl2;
 	
-	if(tgl3 != tgl2) begin
+	if((tgl3 != tgl2) || rst2) begin
 		AUDIO_L <= l;
 		AUDIO_R <= r;
 	end
