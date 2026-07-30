@@ -140,7 +140,8 @@ architecture rtl of T80 is
 	signal Ap, Fp               : std_logic_vector(7 downto 0);
 	signal I                    : std_logic_vector(7 downto 0);
 	signal R                    : unsigned(7 downto 0);
-	signal SP, PC               : unsigned(15 downto 0);
+	signal SP                   : unsigned(15 downto 0) := (others => '1');
+	signal PC                   : unsigned(15 downto 0);
 
 	signal RegDIH               : std_logic_vector(7 downto 0);
 	signal RegDIL               : std_logic_vector(7 downto 0);
@@ -389,7 +390,6 @@ begin
 			Fp <= (others => '1');
 			I <= (others => '0');
 			R <= (others => '0');
-			SP <= (others => '1');
 			Alternate <= '0';
 
 			Read_To_Reg_r <= "00000";
